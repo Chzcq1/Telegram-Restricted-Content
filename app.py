@@ -1,6 +1,7 @@
 import asyncio
 import threading
 import logging
+import os
 import sys
 
 from src.client import UserClient
@@ -12,6 +13,8 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+PORT = int(os.environ.get("PORT", 5000))
 
 
 async def main():
@@ -31,7 +34,7 @@ async def main():
     flask_thread = threading.Thread(
         target=lambda: flask_app.run(
             host="0.0.0.0",
-            port=5000,
+            port=PORT,
             use_reloader=False,
             threaded=True,
         ),
@@ -39,7 +42,7 @@ async def main():
         name="flask",
     )
     flask_thread.start()
-    logger.info("Web interface running on port 5000 — open the Preview tab.")
+    logger.info(f"Web interface running on port {PORT} — open the Preview tab.")
 
     # Keep the asyncio loop alive for Pyrogram coroutines
     await asyncio.Event().wait()

@@ -1,4 +1,7 @@
 /venv
-*__pycache__
+__pycache__/
+*.py[cod]
 .env
 *.session
+downloads/
+.pythonlibs/

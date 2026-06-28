@@ -773,4 +773,10 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
                 f.unlink(); deleted += 1
         return jsonify({"ok": True, "deleted": deleted})
 
+    # ── Health check (required by Render) ─────────────────────────────────────
+
+    @app.route("/healthz")
+    def healthz():
+        return jsonify({"status": "ok"})
+
     return app

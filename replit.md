@@ -1,27 +1,40 @@
 # Telegram Restricted Content Downloader
 
-A Python CLI tool that monitors your clipboard for Telegram media links and downloads both restricted and non-restricted content from Telegram channels and groups.
+A web-based tool to download media (videos, photos, documents) from Telegram channels and groups, including restricted content. Built with Python + Flask + Pyrogram.
 
 ## How to Use
 
-1. Run the app — it starts monitoring your clipboard automatically.
-2. Copy any Telegram media link (e.g. `https://t.me/...`) to your clipboard.
-3. The app detects it and adds it to the download queue.
-4. Press **Enter** to download all queued media.
-5. Press **r + Enter** to clear the queue.
-6. Type **exit** to stop the program.
+1. Run the app — Flask web server starts on the configured port.
+2. Open the web interface and log in with your Telegram phone number.
+3. Enter a Telegram message link to scan and preview media.
+4. Select items and download them to the server, then save them locally.
 
 ## Setup
 
-Requires two Telegram API credentials stored as secrets:
-- `API_ID` — from https://my.telegram.org/auth
-- `API_HASH` — from https://my.telegram.org/auth
+Requires Telegram API credentials (get from https://my.telegram.org/auth):
+- `API_ID` — numeric app ID
+- `API_HASH` — app hash string
+- `PHONE_NUMBER` — (optional) pre-fills the login form
 
-## Running
+## Running Locally
 
 ```bash
 python app.py
 ```
+
+## Deploying to Render
+
+1. Push this repo to GitHub.
+2. Go to https://dashboard.render.com → New → Web Service.
+3. Connect your GitHub repo.
+4. Render auto-detects `render.yaml` — settings are pre-configured.
+5. Add environment variables in the Render dashboard:
+   - `API_ID`
+   - `API_HASH`
+   - `PHONE_NUMBER` (optional)
+6. Click **Deploy**.
+
+The app listens on the `PORT` env var (set automatically by Render). Health check runs at `/healthz`.
 
 ## User Preferences
 
