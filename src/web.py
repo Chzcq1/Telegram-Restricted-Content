@@ -2,7 +2,7 @@ import os
 import asyncio
 from pathlib import Path
 from flask import Flask, request, jsonify, send_from_directory, render_template_string
-from src.downloader import BatchDownloader, parse_link, _fmt_size
+from src.downloader import BatchDownloader, BotForwarder, parse_link, _fmt_size
 
 DOWNLOADS_DIR = Path("downloads")
 DOWNLOADS_DIR.mkdir(exist_ok=True)
@@ -269,6 +269,27 @@ INDEX_HTML = r"""<!DOCTYPE html>
   <!-- Downloader card -->
   <div id="dl-card" class="card p-5 hidden card-glow">
     <p class="section-label">Batch Downloader</p>
+
+    <!-- Mode toggle -->
+    <div class="flex gap-1 p-1 mb-3" style="background:var(--surface);border-radius:8px;border:1px solid var(--border)">
+      <button id="btn-mode-save" class="btn flex-1 btn-accent" onclick="setMode('save')" style="font-size:.75rem">💾 บันทึกลงเซิร์ฟเวอร์</button>
+      <button id="btn-mode-fwd"  class="btn flex-1 btn-ghost"  onclick="setMode('forward')" style="font-size:.75rem">🤖 ส่งผ่านบอท</button>
+    </div>
+
+    <!-- Bot config (forward mode only) -->
+    <div id="bot-config" class="hidden mb-3 p-3 space-y-2" style="background:var(--surface);border-radius:8px;border:1px solid var(--accent)30">
+      <p class="text-xs font-bold" style="color:var(--accent);letter-spacing:.06em">⚙️ ตั้งค่าบอท</p>
+      <input id="bot-token" type="password" placeholder="Bot Token (จาก @BotFather)"/>
+      <input id="target-chat" type="text" placeholder="Target Chat ID  เช่น -1001234567890"/>
+      <div class="flex items-center gap-2">
+        <button class="btn btn-ghost" style="padding:5px 12px;font-size:.75rem" onclick="validateBot()">
+          <span id="bot-spinner" class="spinner hidden"></span>
+          ทดสอบบอท
+        </button>
+        <span id="bot-status" class="text-xs" style="color:var(--muted)"></span>
+      </div>
+    </div>
+
     <div class="space-y-3">
       <input id="dl-link" type="text" placeholder="https://t.me/c/1234567890/100"/>
       <div class="grid grid-cols-2 gap-3">
@@ -286,7 +307,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
           <span id="scan-spinner" class="spinner hidden"></span>
           Scan &amp; Preview
         </button>
-        <button class="btn btn-purple" onclick="startBatch()">Download Range</button>
+        <button id="btn-dl-range" class="btn btn-purple" onclick="startBatch()">Download Range</button>
         <button class="btn btn-ghost" onclick="stopDownload()">Stop</button>
       </div>
     </div>
@@ -349,6 +370,39 @@ let polling = null;
 let allFilesSelected = false;
 let thumbAllSelected = false;
 let scannedLink = '';
+let currentMode = 'save';
+
+/* ─── Mode toggle ─── */
+function setMode(mode) {
+  currentMode = mode;
+  const isFwd = mode === 'forward';
+  document.getElementById('bot-config').classList.toggle('hidden', !isFwd);
+  document.getElementById('btn-mode-save').className = 'btn flex-1 ' + (isFwd ? 'btn-ghost' : 'btn-accent');
+  document.getElementById('btn-mode-fwd').className  = 'btn flex-1 ' + (isFwd ? 'btn-accent' : 'btn-ghost');
+  document.getElementById('btn-dl-range').textContent = isFwd ? '🤖 Forward Range' : 'Download Range';
+}
+
+async function validateBot() {
+  const token = document.getElementById('bot-token').value.trim();
+  const chat  = document.getElementById('target-chat').value.trim();
+  const statusEl = document.getElementById('bot-status');
+  const spinner  = document.getElementById('bot-spinner');
+  if (!token || !chat) {
+    statusEl.textContent = 'กรอก Bot Token และ Chat ID ก่อน';
+    statusEl.style.color = 'var(--red)'; return;
+  }
+  spinner.classList.remove('hidden');
+  statusEl.textContent = 'กำลังทดสอบ…'; statusEl.style.color = 'var(--muted)';
+  const d = await post('/api/bot/validate', { bot_token: token, target_chat_id: chat });
+  spinner.classList.add('hidden');
+  if (d.ok) {
+    statusEl.textContent = '✓ @' + d.bot_username + ' พร้อมส่งแล้ว';
+    statusEl.style.color = 'var(--green)';
+  } else {
+    statusEl.textContent = '✗ ' + (d.error || 'ผิดพลาด');
+    statusEl.style.color = 'var(--red)';
+  }
+}
 
 /* ─── Auth ─── */
 async function checkAuth() {
@@ -462,7 +516,16 @@ async function downloadScanned() {
   const ids = [...document.querySelectorAll('.thumb-card.selected')]
     .map(el => parseInt(el.dataset.id));
   if (!ids.length) { alert('Select at least one item.'); return; }
-  const d = await post('/api/download/start_ids', { link: scannedLink, msg_ids: ids });
+  const body = { link: scannedLink, msg_ids: ids };
+  if (currentMode === 'forward') {
+    body.forward_mode = true;
+    body.bot_token = document.getElementById('bot-token').value.trim();
+    body.target_chat_id = document.getElementById('target-chat').value.trim();
+    if (!body.bot_token || !body.target_chat_id) {
+      alert('กรอก Bot Token และ Target Chat ID ในส่วน ⚙️ ตั้งค่าบอท ก่อนครับ'); return;
+    }
+  }
+  const d = await post('/api/download/start_ids', body);
   if (d.ok) {
     document.getElementById('prog-card').classList.remove('hidden');
     startPolling();
@@ -475,7 +538,16 @@ async function startBatch() {
   const count = parseInt(document.getElementById('dl-count').value) || 10;
   const offset = parseInt(document.getElementById('dl-offset').value) || 0;
   if (!link) { alert('Enter a Telegram link.'); return; }
-  const d = await post('/api/download/start', { link, count, start_offset: offset });
+  const body = { link, count, start_offset: offset };
+  if (currentMode === 'forward') {
+    body.forward_mode = true;
+    body.bot_token = document.getElementById('bot-token').value.trim();
+    body.target_chat_id = document.getElementById('target-chat').value.trim();
+    if (!body.bot_token || !body.target_chat_id) {
+      alert('กรอก Bot Token และ Target Chat ID ในส่วน ⚙️ ตั้งค่าบอท ก่อนครับ'); return;
+    }
+  }
+  const d = await post('/api/download/start', body);
   if (d.ok) {
     document.getElementById('prog-card').classList.remove('hidden');
     startPolling();
@@ -692,6 +764,19 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
 
     # ── Downloads ─────────────────────────────────────────────────────────────
 
+    @app.route("/api/bot/validate", methods=["POST"])
+    def bot_validate():
+        data = request.get_json(force=True)
+        token = data.get("bot_token", "").strip()
+        chat  = data.get("target_chat_id", "").strip()
+        if not token or not chat:
+            return jsonify({"ok": False, "error": "กรอกข้อมูลให้ครบ"})
+        fwd = BotForwarder(token, chat)
+        ok, result = fwd.validate()
+        if ok:
+            return jsonify({"ok": True, "bot_username": result})
+        return jsonify({"ok": False, "error": result})
+
     @app.route("/api/download/start", methods=["POST"])
     def download_start():
         if download_state["running"]:
@@ -708,8 +793,15 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
             parse_link(link)
         except ValueError as e:
             return jsonify({"ok": False, "error": str(e)})
+        forwarder = None
+        if data.get("forward_mode"):
+            token = data.get("bot_token", "").strip()
+            chat  = data.get("target_chat_id", "").strip()
+            if not token or not chat:
+                return jsonify({"ok": False, "error": "Bot Token และ Target Chat ID จำเป็นสำหรับ Forward Mode"})
+            forwarder = BotForwarder(token, chat)
         dl = BatchDownloader(tg_client, download_state)
-        asyncio.run_coroutine_threadsafe(dl.run(link, count, offset), loop)
+        asyncio.run_coroutine_threadsafe(dl.run(link, count, offset, forwarder=forwarder), loop)
         return jsonify({"ok": True})
 
     @app.route("/api/download/start_ids", methods=["POST"])
@@ -727,8 +819,15 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
             parse_link(link)
         except ValueError as e:
             return jsonify({"ok": False, "error": str(e)})
+        forwarder = None
+        if data.get("forward_mode"):
+            token = data.get("bot_token", "").strip()
+            chat  = data.get("target_chat_id", "").strip()
+            if not token or not chat:
+                return jsonify({"ok": False, "error": "Bot Token และ Target Chat ID จำเป็นสำหรับ Forward Mode"})
+            forwarder = BotForwarder(token, chat)
         dl = BatchDownloader(tg_client, download_state)
-        asyncio.run_coroutine_threadsafe(dl.run_specific(link, msg_ids), loop)
+        asyncio.run_coroutine_threadsafe(dl.run_specific(link, msg_ids, forwarder=forwarder), loop)
         return jsonify({"ok": True})
 
     @app.route("/api/download/stop", methods=["POST"])

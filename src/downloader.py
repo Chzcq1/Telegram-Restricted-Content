@@ -2,11 +2,58 @@ import os
 import re
 import base64
 import datetime
+import requests as _requests
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 DOWNLOADS_DIR = Path("downloads")
 DOWNLOADS_DIR.mkdir(exist_ok=True)
+
+
+class BotForwarder:
+    """Sends downloaded files to a Telegram chat via Bot API, then deletes them."""
+
+    def __init__(self, bot_token: str, target_chat_id: str):
+        self.bot_token = bot_token.strip()
+        self.target_chat_id = target_chat_id.strip()
+        self._base = f"https://api.telegram.org/bot{self.bot_token}"
+
+    def validate(self) -> tuple:
+        """Check bot token is valid. Returns (ok: bool, username_or_error: str)."""
+        try:
+            r = _requests.get(f"{self._base}/getMe", timeout=10)
+            data = r.json()
+            if data.get("ok"):
+                return True, data["result"].get("username", "bot")
+            return False, data.get("description", "Invalid token")
+        except Exception as e:
+            return False, str(e)
+
+    def send_file(self, file_path: Path, caption: str = "") -> tuple:
+        """Upload file to target chat. Returns (ok: bool, error: str)."""
+        ext = file_path.suffix.lower()
+        if ext in (".mp4", ".mov", ".avi", ".mkv", ".webm"):
+            method, field = "sendVideo", "video"
+        elif ext in (".jpg", ".jpeg", ".png", ".webp", ".bmp"):
+            method, field = "sendPhoto", "photo"
+        elif ext == ".gif":
+            method, field = "sendAnimation", "animation"
+        else:
+            method, field = "sendDocument", "document"
+        try:
+            with open(file_path, "rb") as f:
+                resp = _requests.post(
+                    f"{self._base}/{method}",
+                    data={"chat_id": self.target_chat_id, "caption": caption[:1024]},
+                    files={field: f},
+                    timeout=600,
+                )
+            data = resp.json()
+            if data.get("ok"):
+                return True, ""
+            return False, data.get("description", "Unknown error")
+        except Exception as e:
+            return False, str(e)
 
 
 def parse_link(link: str):
@@ -110,18 +157,20 @@ class BatchDownloader:
 
     # ── Batch download: sequential range ──────────────────────────────────────
 
-    async def run(self, link: str, count: int, start_offset: int = 0):
+    async def run(self, link: str, count: int, start_offset: int = 0,
+                  forwarder: Optional[BotForwarder] = None):
         self.state.update({
             "running": True, "total": count, "current": 0,
             "downloaded": 0, "skipped": 0,
             "current_file": "", "current_progress": 0,
             "log": [], "new_files": [],
+            "forward_mode": forwarder is not None,
         })
         try:
             chat_id, base_id = parse_link(link)
             start_id = base_id + start_offset
             self._log(f"Batch started — chat: {chat_id}, IDs: {start_id} to {start_id + count - 1}")
-            await self._download_ids(chat_id, list(range(start_id, start_id + count)))
+            await self._download_ids(chat_id, list(range(start_id, start_id + count)), forwarder)
         except Exception as e:
             self._log(f"Fatal error: {e}")
         finally:
@@ -129,18 +178,20 @@ class BatchDownloader:
 
     # ── Batch download: specific message IDs ──────────────────────────────────
 
-    async def run_specific(self, link: str, msg_ids: List[int]):
+    async def run_specific(self, link: str, msg_ids: List[int],
+                           forwarder: Optional[BotForwarder] = None):
         count = len(msg_ids)
         self.state.update({
             "running": True, "total": count, "current": 0,
             "downloaded": 0, "skipped": 0,
             "current_file": "", "current_progress": 0,
             "log": [], "new_files": [],
+            "forward_mode": forwarder is not None,
         })
         try:
             chat_id, _ = parse_link(link)
             self._log(f"Downloading {count} selected item(s) from chat {chat_id}")
-            await self._download_ids(chat_id, msg_ids)
+            await self._download_ids(chat_id, msg_ids, forwarder)
         except Exception as e:
             self._log(f"Fatal error: {e}")
         finally:
@@ -148,7 +199,8 @@ class BatchDownloader:
 
     # ── Shared download loop ───────────────────────────────────────────────────
 
-    async def _download_ids(self, chat_id, msg_ids: List[int]):
+    async def _download_ids(self, chat_id, msg_ids: List[int],
+                            forwarder: Optional[BotForwarder] = None):
         for i, msg_id in enumerate(msg_ids):
             if not self.state["running"]:
                 self._log("Cancelled.")
@@ -165,7 +217,8 @@ class BatchDownloader:
                     continue
 
                 media_label = str(msg.media).split(".")[-1]
-                self._log(f"[{msg_id}] {media_label} — downloading…")
+                action = "forwarding" if forwarder else "downloading"
+                self._log(f"[{msg_id}] {media_label} — {action}…")
                 self.state["current_file"] = f"msg {msg_id}"
 
                 def make_progress(mid):
@@ -183,9 +236,22 @@ class BatchDownloader:
 
                 if path:
                     filename = os.path.basename(path)
-                    self._log(f"[{msg_id}] saved: {filename}")
-                    self.state["downloaded"] += 1
-                    self.state["new_files"].append(filename)
+                    if forwarder:
+                        self.state["current_file"] = f"msg {msg_id} — sending to bot…"
+                        caption = getattr(msg, "caption", "") or ""
+                        ok, err = forwarder.send_file(Path(path), caption=caption)
+                        if ok:
+                            Path(path).unlink(missing_ok=True)
+                            self._log(f"[{msg_id}] forwarded & deleted: {filename}")
+                            self.state["downloaded"] += 1
+                        else:
+                            self._log(f"[{msg_id}] send failed ({err}) — kept: {filename}")
+                            self.state["skipped"] += 1
+                            self.state["new_files"].append(filename)
+                    else:
+                        self._log(f"[{msg_id}] saved: {filename}")
+                        self.state["downloaded"] += 1
+                        self.state["new_files"].append(filename)
                 else:
                     self._log(f"[{msg_id}] no output path — skipped")
                     self.state["skipped"] += 1
@@ -195,7 +261,7 @@ class BatchDownloader:
                 self.state["skipped"] += 1
 
         self._log(
-            f"Done — {self.state['downloaded']} downloaded, "
+            f"Done — {self.state['downloaded']} {'forwarded' if forwarder else 'downloaded'}, "
             f"{self.state['skipped']} skipped."
         )
 
