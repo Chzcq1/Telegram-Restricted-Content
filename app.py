@@ -25,7 +25,15 @@ PORT = int(os.environ.get("PORT", 5000))
 async def main():
     tg_client = UserClient()
     logger.info("Connecting to Telegram…")
-    await tg_client.connect()
+    try:
+        await tg_client.connect()
+    except AttributeError as e:
+        # API_ID / API_HASH not set — start web server anyway so the user
+        # sees the error message in the UI instead of a blank crash.
+        logger.error(f"Telegram credentials missing: {e}")
+        logger.error("Please set API_ID and API_HASH environment variables.")
+    except Exception as e:
+        logger.error(f"Failed to connect to Telegram: {e}")
 
     if tg_client.is_authorized:
         me = await tg_client.get_me()

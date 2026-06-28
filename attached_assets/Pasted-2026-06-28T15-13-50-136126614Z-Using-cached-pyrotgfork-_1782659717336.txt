@@ -1,0 +1,51 @@
+2026-06-28T15:13:50.136126614Z Using cached pyrotgfork-2.1.35-py3-none-any.whl (4.8 MB)
+2026-06-28T15:13:50.14477865Z Using cached PySocks-1.7.1-py3-none-any.whl (16 kB)
+2026-06-28T15:13:50.145777105Z Using cached python_dotenv-1.0.1-py3-none-any.whl (19 kB)
+2026-06-28T15:13:50.146816411Z Using cached flask-3.1.3-py3-none-any.whl (103 kB)
+2026-06-28T15:13:50.14798023Z Using cached pytgcrypto-1.2.12-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (50 kB)
+2026-06-28T15:13:50.160042511Z Using cached uvloop-0.22.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (4.4 MB)
+2026-06-28T15:13:50.169593049Z Using cached requests-2.34.2-py3-none-any.whl (73 kB)
+2026-06-28T15:13:50.170658546Z Using cached blinker-1.9.0-py3-none-any.whl (8.5 kB)
+2026-06-28T15:13:50.171783124Z Using cached certifi-2026.6.17-py3-none-any.whl (133 kB)
+2026-06-28T15:13:50.173260971Z Using cached charset_normalizer-3.4.7-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (216 kB)
+2026-06-28T15:13:50.174553853Z Using cached click-8.4.2-py3-none-any.whl (119 kB)
+2026-06-28T15:13:50.175686901Z Using cached idna-3.18-py3-none-any.whl (65 kB)
+2026-06-28T15:13:50.176738027Z Using cached itsdangerous-2.2.0-py3-none-any.whl (16 kB)
+2026-06-28T15:13:50.177757983Z Using cached jinja2-3.1.6-py3-none-any.whl (134 kB)
+2026-06-28T15:13:50.178976883Z Using cached markupsafe-3.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (22 kB)
+2026-06-28T15:13:50.179973768Z Using cached urllib3-2.7.0-py3-none-any.whl (131 kB)
+2026-06-28T15:13:50.181223979Z Using cached werkzeug-3.1.8-py3-none-any.whl (226 kB)
+2026-06-28T15:13:50.304267138Z Installing collected packages: pyaes, uvloop, urllib3, TgCrypto, python-dotenv, PyTgCrypto, PySocks, markupsafe, itsdangerous, idna, click, charset_normalizer, certifi, blinker, werkzeug, requests, pyrotgfork, jinja2, flask
+2026-06-28T15:13:53.471684656Z Successfully installed PySocks-1.7.1 PyTgCrypto-1.2.12 TgCrypto-1.2.5 blinker-1.9.0 certifi-2026.6.17 charset_normalizer-3.4.7 click-8.4.2 flask-3.1.3 idna-3.18 itsdangerous-2.2.0 jinja2-3.1.6 markupsafe-3.0.3 pyaes-1.6.1 pyrotgfork-2.1.35 python-dotenv-1.0.1 requests-2.34.2 urllib3-2.7.0 uvloop-0.22.1 werkzeug-3.1.8
+2026-06-28T15:13:53.508127335Z WARNING: There was an error checking the latest version of pip.
+2026-06-28T15:13:55.908453713Z ==> Uploading build...
+2026-06-28T15:14:00.526022778Z ==> Uploaded in 2.6s. Compression took 2.0s
+2026-06-28T15:14:00.598834264Z ==> Build successful 🎉
+2026-06-28T15:14:04.471000098Z ==> Deploying...
+2026-06-28T15:14:04.590330368Z ==> Setting WEB_CONCURRENCY=1 by default, based on available CPUs in the instance
+2026-06-28T15:14:13.640077119Z ==> Running 'python app.py'
+2026-06-28T15:14:29.748841768Z 15:14:29 [INFO] Connecting to Telegram…
+2026-06-28T15:14:32.249966558Z Traceback (most recent call last):
+2026-06-28T15:14:32.249988739Z   File "/opt/render/project/src/app.py", line 58, in <module>
+2026-06-28T15:14:32.250001219Z     asyncio.run(main())
+2026-06-28T15:14:32.250102942Z   File "/opt/render/project/python/Python-3.12.0/lib/python3.12/asyncio/runners.py", line 194, in run
+2026-06-28T15:14:32.250205365Z     return runner.run(main)
+2026-06-28T15:14:32.335199919Z            ^^^^^^^^^^^^^^^^
+2026-06-28T15:14:32.335227299Z   File "/opt/render/project/python/Python-3.12.0/lib/python3.12/asyncio/runners.py", line 118, in run
+2026-06-28T15:14:32.335375394Z     return self._loop.run_until_complete(task)
+2026-06-28T15:14:32.335389194Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-06-28T15:14:32.335393834Z   File "/opt/render/project/python/Python-3.12.0/lib/python3.12/asyncio/base_events.py", line 664, in run_until_complete
+2026-06-28T15:14:32.335633471Z     return future.result()
+2026-06-28T15:14:32.335639811Z            ^^^^^^^^^^^^^^^
+2026-06-28T15:14:32.335643811Z   File "/opt/render/project/src/app.py", line 28, in main
+2026-06-28T15:14:32.335737104Z     await tg_client.connect()
+2026-06-28T15:14:32.335742534Z   File "/opt/render/project/src/src/client.py", line 23, in connect
+2026-06-28T15:14:32.335831367Z     await self.client.connect()
+2026-06-28T15:14:32.335835237Z   File "/opt/render/project/src/.venv/lib/python3.12/site-packages/pyrogram/methods/auth/connect.py", line 40, in connect
+2026-06-28T15:14:32.33594666Z     await self.load_session()
+2026-06-28T15:14:32.33595046Z   File "/opt/render/project/src/.venv/lib/python3.12/site-packages/pyrogram/client.py", line 815, in load_session
+2026-06-28T15:14:32.336195637Z     raise AttributeError("The API key is required for new authorizations. "
+2026-06-28T15:14:32.336207817Z AttributeError: The API key is required for new authorizations. More info: https://docs.pyrogram.org/start/auth
+2026-06-28T15:14:34.671848032Z ==> Exited with status 1
+2026-06-28T15:14:34.674644757Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
+2026-06-28T15:14:38.593611588Z ==> Running 'python app.py'

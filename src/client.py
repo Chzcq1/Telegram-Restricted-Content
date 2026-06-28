@@ -10,16 +10,22 @@ PHONE_NUMBER = os.environ.get("PHONE_NUMBER", "")
 
 class UserClient:
     def __init__(self):
-        self.client = Client(
-            "mysession",
-            api_id=API_ID,
-            api_hash=API_HASH,
-            no_updates=True,
-        )
         self.is_authorized = False
         self._phone_code_hash = None
+        self.credentials_missing = not API_ID or not API_HASH
+        if not self.credentials_missing:
+            self.client = Client(
+                "mysession",
+                api_id=API_ID,
+                api_hash=API_HASH,
+                no_updates=True,
+            )
+        else:
+            self.client = None
 
     async def connect(self):
+        if self.credentials_missing:
+            return
         await self.client.connect()
         try:
             self.is_authorized = await self.client.storage.is_user_authorized()
@@ -27,6 +33,8 @@ class UserClient:
             self.is_authorized = False
 
     async def send_code(self, phone: str) -> dict:
+        if self.credentials_missing:
+            return {"ok": False, "error": "API_ID และ API_HASH ยังไม่ได้ตั้งค่าบน Render Dashboard"}
         try:
             sent = await self.client.send_code(phone)
             self._phone_code_hash = sent.phone_code_hash
@@ -35,6 +43,8 @@ class UserClient:
             return {"ok": False, "error": str(e)}
 
     async def sign_in(self, phone: str, code: str, password: str = "") -> dict:
+        if self.credentials_missing:
+            return {"ok": False, "error": "API_ID และ API_HASH ยังไม่ได้ตั้งค่าบน Render Dashboard"}
         try:
             await self.client.sign_in(phone, self._phone_code_hash, code)
             self.is_authorized = True
@@ -54,6 +64,8 @@ class UserClient:
             return {"ok": False, "error": str(e)}
 
     async def get_me(self) -> dict:
+        if self.credentials_missing or not self.client:
+            return {}
         try:
             me = await self.client.get_me()
             name = f"{me.first_name or ''} {me.last_name or ''}".strip()

@@ -249,6 +249,15 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
 <main class="max-w-2xl mx-auto px-4 py-6 space-y-4">
 
+  <!-- API credentials missing banner -->
+  <div id="no-creds-banner" class="hidden" style="background:#7c2d12;border:1px solid #dc2626;border-radius:10px;padding:14px 16px;font-size:.85rem;line-height:1.5">
+    ⚠️ <strong>API_ID และ API_HASH ยังไม่ได้ตั้งค่า</strong><br>
+    ไปที่ <strong>Render Dashboard → Your Service → Environment</strong> แล้วเพิ่มตัวแปร:<br>
+    <code style="background:#450a0a;padding:2px 6px;border-radius:4px">API_ID</code> และ
+    <code style="background:#450a0a;padding:2px 6px;border-radius:4px">API_HASH</code><br>
+    <span style="color:#fca5a5">รับค่าได้จาก <a href="https://my.telegram.org/auth" target="_blank" style="color:#f87171;text-decoration:underline">my.telegram.org/auth</a></span>
+  </div>
+
   <!-- Auth card -->
   <div id="auth-card" class="card p-5 hidden">
     <p class="section-label">Authentication Required</p>
@@ -432,9 +441,18 @@ async function checkAuth() {
     const d = await (await fetch('/api/auth/status')).json();
     const dot = document.getElementById('status-dot');
     const lbl = document.getElementById('status-label');
-    if (d.authorized) {
+    const banner = document.getElementById('no-creds-banner');
+    if (d.credentials_missing) {
+      dot.className = 'dot dot-amber';
+      lbl.textContent = 'Missing API credentials';
+      banner.classList.remove('hidden');
+      document.getElementById('auth-card').classList.add('hidden');
+      document.getElementById('dl-card').classList.add('hidden');
+      document.getElementById('clone-card').classList.add('hidden');
+    } else if (d.authorized) {
       dot.className = 'dot dot-green';
       lbl.textContent = d.user?.name || 'Authenticated';
+      banner.classList.add('hidden');
       document.getElementById('auth-card').classList.add('hidden');
       document.getElementById('dl-card').classList.remove('hidden');
       document.getElementById('clone-card').classList.remove('hidden');
@@ -442,6 +460,7 @@ async function checkAuth() {
     } else {
       dot.className = 'dot dot-amber';
       lbl.textContent = 'Not logged in';
+      banner.classList.add('hidden');
       document.getElementById('auth-card').classList.remove('hidden');
       document.getElementById('dl-card').classList.add('hidden');
       document.getElementById('clone-card').classList.add('hidden');
@@ -772,13 +791,15 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
 
     @app.route("/api/auth/status")
     def auth_status():
+        if tg_client.credentials_missing:
+            return jsonify({"authorized": False, "credentials_missing": True})
         if tg_client.is_authorized:
             try:
                 user = run_async(tg_client.get_me(), timeout=10)
             except Exception:
                 user = {}
-            return jsonify({"authorized": True, "user": user})
-        return jsonify({"authorized": False})
+            return jsonify({"authorized": True, "user": user, "credentials_missing": False})
+        return jsonify({"authorized": False, "credentials_missing": False})
 
     @app.route("/api/auth/send_code", methods=["POST"])
     def send_code():
