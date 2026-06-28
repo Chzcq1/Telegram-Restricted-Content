@@ -338,11 +338,25 @@ INDEX_HTML = r"""<!DOCTYPE html>
   <!-- Clone Topic card -->
   <div id="clone-card" class="card p-5 hidden card-glow" style="border-color:#7c3aed30">
     <p class="section-label" style="color:var(--purple)">🔁 Clone Topic</p>
-    <p class="text-xs mb-3" style="color:var(--muted)">กรอก link ข้อความแรกของ Topic — ระบบดึงทุกอย่าง (วิดีโอ, รูป, ข้อความ) ส่งบอทให้ครบ แล้วลบทิ้งอัตโนมัติ</p>
+
+    <!-- Flow explanation -->
+    <div class="mb-3" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.78rem;line-height:1.7">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span style="background:#1d4ed8;padding:2px 8px;border-radius:6px;font-size:.72rem">👤 บัญชีของคุณ</span>
+        <span style="color:var(--muted)">ดึงไฟล์จากกลุ่มต้นทาง</span>
+        <span style="color:var(--muted)">→</span>
+        <span style="background:#7c3aed;padding:2px 8px;border-radius:6px;font-size:.72rem">🤖 บอท</span>
+        <span style="color:var(--muted)">ส่งไปกลุ่มปลายทาง</span>
+        <span style="color:var(--muted)">→</span>
+        <span style="color:var(--muted)">🗑 ลบทิ้ง</span>
+      </div>
+      <p class="mt-1" style="color:#86efac">✅ บอทไม่ต้องอยู่ในกลุ่มต้นทาง — บัญชีของคุณเป็นคนดึงข้อมูล<br>⚠️ บอทต้องเป็นสมาชิกในกลุ่ม<strong>ปลายทาง</strong>เท่านั้น</p>
+    </div>
+
     <div class="space-y-3">
-      <input id="clone-link" type="text" placeholder="https://t.me/c/1234567890/100  (ข้อความแรกของ Topic)"/>
+      <input id="clone-link" type="text" placeholder="Link ข้อความแรกของ Topic  เช่น https://t.me/c/1234567890/100"/>
       <input id="clone-bot-token" type="password" placeholder="Bot Token (จาก @BotFather)"/>
-      <input id="clone-target-chat" type="text" placeholder="Target Chat ID  เช่น -1001234567890"/>
+      <input id="clone-target-chat" type="text" placeholder="Chat ID กลุ่มปลายทาง (บอทต้องอยู่ในนี้)  เช่น -1001234567890"/>
       <div class="flex items-center gap-2">
         <button class="btn btn-ghost" style="padding:5px 12px;font-size:.75rem" onclick="validateCloneBot()">
           <span id="clone-bot-spinner" class="spinner hidden"></span>
