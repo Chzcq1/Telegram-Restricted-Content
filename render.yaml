@@ -6,6 +6,8 @@ services:
     startCommand: python app.py
     healthCheckPath: /healthz
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.0"
       - key: API_ID
         sync: false
       - key: API_HASH
