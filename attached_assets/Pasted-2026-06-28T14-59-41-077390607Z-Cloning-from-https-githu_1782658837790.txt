@@ -1,0 +1,27 @@
+2026-06-28T14:59:41.077390607Z ==> Cloning from https://github.com/Chzcq1/Telegram-Restricted-Content
+2026-06-28T14:59:41.474834611Z ==> Checking out commit 262d6a32251a382b097fd6ce0a323fe102606c6a in branch main
+2026-06-28T14:59:42.127882207Z ==> Using Python version 3.14.3 (default)
+2026-06-28T14:59:42.127892366Z ==> Docs on specifying a Python version: https://render.com/docs/python-version
+2026-06-28T14:59:42.128018112Z ==> Installing Python version 3.14.3...
+2026-06-28T14:59:48.089562037Z ==> Using Poetry version 2.1.3 (default)
+2026-06-28T14:59:48.133163968Z ==> Docs on specifying a Poetry version: https://render.com/docs/poetry-version
+2026-06-28T14:59:48.199872873Z ==> Running build command 'pip install -r requirements.txt'...
+2026-06-28T14:59:48.657643539Z Collecting pyaes==1.6.1 (from -r requirements.txt (line 1))
+2026-06-28T14:59:48.723804365Z   Downloading pyaes-1.6.1.tar.gz (28 kB)
+2026-06-28T14:59:48.742726608Z   Installing build dependencies: started
+2026-06-28T14:59:49.519970053Z   Installing build dependencies: finished with status 'done'
+2026-06-28T14:59:49.520613001Z   Getting requirements to build wheel: started
+2026-06-28T14:59:49.901156665Z   Getting requirements to build wheel: finished with status 'done'
+2026-06-28T14:59:49.90209502Z   Preparing metadata (pyproject.toml): started
+2026-06-28T14:59:50.105904538Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-06-28T14:59:50.136559227Z Collecting pyrotgfork==2.1.35 (from -r requirements.txt (line 2))
+2026-06-28T14:59:50.141357043Z   Downloading pyrotgfork-2.1.35-py3-none-any.whl.metadata (5.3 kB)
+2026-06-28T14:59:50.160295545Z Collecting PySocks==1.7.1 (from -r requirements.txt (line 3))
+2026-06-28T14:59:50.163654692Z   Downloading PySocks-1.7.1-py3-none-any.whl.metadata (13 kB)
+2026-06-28T14:59:50.210619725Z ERROR: Could not find a version that satisfies the requirement PyTgCrypto==1.2.6 (from versions: 1.2.12)
+2026-06-28T14:59:50.325741334Z 
+2026-06-28T14:59:50.325758872Z [notice] A new release of pip is available: 25.3 -> 26.1.2
+2026-06-28T14:59:50.325762481Z [notice] To update, run: pip install --upgrade pip
+2026-06-28T14:59:50.326068107Z ERROR: No matching distribution found for PyTgCrypto==1.2.6
+2026-06-28T14:59:50.420810884Z ==> Build failed 😞
+2026-06-28T14:59:50.420827982Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
