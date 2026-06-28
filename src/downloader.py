@@ -55,6 +55,21 @@ class BotForwarder:
         except Exception as e:
             return False, str(e)
 
+    def send_text(self, text: str) -> tuple:
+        """Send a plain text message to target chat. Returns (ok: bool, error: str)."""
+        try:
+            resp = _requests.post(
+                f"{self._base}/sendMessage",
+                data={"chat_id": self.target_chat_id, "text": text[:4096]},
+                timeout=30,
+            )
+            data = resp.json()
+            if data.get("ok"):
+                return True, ""
+            return False, data.get("description", "Unknown error")
+        except Exception as e:
+            return False, str(e)
+
 
 def parse_link(link: str):
     link = link.strip()
@@ -264,6 +279,124 @@ class BatchDownloader:
             f"Done — {self.state['downloaded']} {'forwarded' if forwarder else 'downloaded'}, "
             f"{self.state['skipped']} skipped."
         )
+
+    # ── Clone entire topic ────────────────────────────────────────────────────
+
+    async def clone_topic(self, link: str, forwarder: BotForwarder, max_gap: int = 30):
+        """Scan all messages forward from the given link and forward them via bot."""
+        self.state.update({
+            "running": True, "total": 0, "current": 0,
+            "downloaded": 0, "skipped": 0,
+            "current_file": "", "current_progress": 0,
+            "log": [], "new_files": [],
+            "forward_mode": True,
+        })
+        try:
+            chat_id, base_id = parse_link(link)
+            self._log(f"Clone started — chat: {chat_id}, from msg {base_id}")
+            self._log(f"Scanning forward (หยุดเมื่อไม่เจอข้อความ {max_gap} อันติดกัน)…")
+
+            msg_id = base_id
+            consecutive_empty = 0
+
+            while self.state["running"]:
+                # Fetch 50 messages at a time
+                batch_ids = list(range(msg_id, msg_id + 50))
+                try:
+                    messages = await self.tg.client.get_messages(chat_id, batch_ids)
+                except Exception as e:
+                    self._log(f"Fetch error at {msg_id}: {e}")
+                    break
+
+                # Pyrogram may return a single Message or list
+                if not isinstance(messages, list):
+                    messages = [messages]
+
+                all_empty_in_batch = True
+                for msg in messages:
+                    if not self.state["running"]:
+                        self._log("Cancelled.")
+                        return
+
+                    # Detect real content
+                    has_media = bool(msg and msg.media)
+                    has_text  = bool(msg and msg.text and msg.text.strip())
+
+                    if not has_media and not has_text:
+                        consecutive_empty += 1
+                        if consecutive_empty >= max_gap:
+                            self._log(f"ไม่พบข้อความ {max_gap} อันติดกัน — สิ้นสุด Topic")
+                            self.state["running"] = False
+                            break
+                        continue
+
+                    # Found real content — reset gap counter
+                    consecutive_empty = 0
+                    all_empty_in_batch = False
+                    self.state["total"] = max(self.state["total"], msg.id - base_id + 1)
+                    self.state["current"] = msg.id - base_id + 1
+
+                    if has_media:
+                        media_label = str(msg.media).split(".")[-1]
+                        self._log(f"[{msg.id}] {media_label} — downloading…")
+                        self.state["current_file"] = f"msg {msg.id}"
+
+                        def make_progress(mid):
+                            def _cb(cur, tot):
+                                if tot:
+                                    self.state["current_progress"] = int(cur * 100 / tot)
+                                    self.state["current_file"] = f"msg {mid}  {self.state['current_progress']}%"
+                            return _cb
+
+                        try:
+                            path = await self.tg.client.download_media(
+                                msg,
+                                file_name=str(DOWNLOADS_DIR) + "/",
+                                progress=make_progress(msg.id),
+                            )
+                            if path:
+                                filename = os.path.basename(path)
+                                self.state["current_file"] = f"msg {msg.id} — sending…"
+                                caption = getattr(msg, "caption", "") or getattr(msg, "text", "") or ""
+                                ok, err = forwarder.send_file(Path(path), caption=caption)
+                                if ok:
+                                    Path(path).unlink(missing_ok=True)
+                                    self._log(f"[{msg.id}] ✓ forwarded & deleted")
+                                    self.state["downloaded"] += 1
+                                else:
+                                    self._log(f"[{msg.id}] ✗ send failed ({err}) — kept on server")
+                                    self.state["skipped"] += 1
+                                    self.state["new_files"].append(filename)
+                            else:
+                                self._log(f"[{msg.id}] ไม่สามารถโหลดไฟล์ได้ — skipped")
+                                self.state["skipped"] += 1
+                        except Exception as e:
+                            self._log(f"[{msg.id}] error: {e}")
+                            self.state["skipped"] += 1
+
+                    elif has_text:
+                        self._log(f"[{msg.id}] text — sending…")
+                        ok, err = forwarder.send_text(msg.text)
+                        if ok:
+                            self._log(f"[{msg.id}] ✓ text sent")
+                            self.state["downloaded"] += 1
+                        else:
+                            self._log(f"[{msg.id}] ✗ text failed ({err})")
+                            self.state["skipped"] += 1
+
+                if not self.state["running"]:
+                    break
+
+                msg_id += 50
+
+            self._log(
+                f"Clone done — {self.state['downloaded']} forwarded, "
+                f"{self.state['skipped']} skipped."
+            )
+        except Exception as e:
+            self._log(f"Fatal error: {e}")
+        finally:
+            self._finish()
 
     def _finish(self):
         self.state["running"] = False

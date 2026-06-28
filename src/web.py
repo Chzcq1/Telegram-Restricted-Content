@@ -326,10 +326,32 @@ INDEX_HTML = r"""<!DOCTYPE html>
     <div id="thumb-grid"></div>
   </div>
 
+  <!-- Clone Topic card -->
+  <div id="clone-card" class="card p-5 hidden card-glow" style="border-color:#7c3aed30">
+    <p class="section-label" style="color:var(--purple)">🔁 Clone Topic</p>
+    <p class="text-xs mb-3" style="color:var(--muted)">กรอก link ข้อความแรกของ Topic — ระบบดึงทุกอย่าง (วิดีโอ, รูป, ข้อความ) ส่งบอทให้ครบ แล้วลบทิ้งอัตโนมัติ</p>
+    <div class="space-y-3">
+      <input id="clone-link" type="text" placeholder="https://t.me/c/1234567890/100  (ข้อความแรกของ Topic)"/>
+      <input id="clone-bot-token" type="password" placeholder="Bot Token (จาก @BotFather)"/>
+      <input id="clone-target-chat" type="text" placeholder="Target Chat ID  เช่น -1001234567890"/>
+      <div class="flex items-center gap-2">
+        <button class="btn btn-ghost" style="padding:5px 12px;font-size:.75rem" onclick="validateCloneBot()">
+          <span id="clone-bot-spinner" class="spinner hidden"></span>
+          ทดสอบบอท
+        </button>
+        <span id="clone-bot-status" class="text-xs" style="color:var(--muted)"></span>
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn btn-purple" onclick="startClone()">🔁 Clone ทั้งหมด</button>
+        <button class="btn btn-ghost" onclick="stopDownload()">Stop</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Progress card -->
   <div id="prog-card" class="card p-5 hidden">
     <div class="flex items-center justify-between mb-4">
-      <p class="section-label" style="margin-bottom:0">Download Progress</p>
+      <p class="section-label" style="margin-bottom:0">Progress</p>
       <span id="prog-label" class="text-xs font-mono" style="color:var(--muted)">0 / 0</span>
     </div>
     <div id="prog-track" class="mb-2"><div id="prog-fill" style="width:0%"></div></div>
@@ -415,12 +437,14 @@ async function checkAuth() {
       lbl.textContent = d.user?.name || 'Authenticated';
       document.getElementById('auth-card').classList.add('hidden');
       document.getElementById('dl-card').classList.remove('hidden');
+      document.getElementById('clone-card').classList.remove('hidden');
       loadFiles();
     } else {
       dot.className = 'dot dot-amber';
       lbl.textContent = 'Not logged in';
       document.getElementById('auth-card').classList.remove('hidden');
       document.getElementById('dl-card').classList.add('hidden');
+      document.getElementById('clone-card').classList.add('hidden');
     }
   } catch (e) {}
 }
@@ -445,6 +469,43 @@ async function verifyCode() {
   if (d.ok) { setMsg('auth-msg', 'Authenticated.', 'green'); setTimeout(checkAuth, 600); }
   else if (d.need_2fa) setMsg('auth-msg', 'Enter your 2FA password.', 'amber');
   else setMsg('auth-msg', d.error || 'Failed.', 'red');
+}
+
+/* ─── Clone Topic ─── */
+async function validateCloneBot() {
+  const token = document.getElementById('clone-bot-token').value.trim();
+  const chat  = document.getElementById('clone-target-chat').value.trim();
+  const statusEl = document.getElementById('clone-bot-status');
+  const spinner  = document.getElementById('clone-bot-spinner');
+  if (!token || !chat) {
+    statusEl.textContent = 'กรอก Bot Token และ Chat ID ก่อน';
+    statusEl.style.color = 'var(--red)'; return;
+  }
+  spinner.classList.remove('hidden');
+  statusEl.textContent = 'กำลังทดสอบ…'; statusEl.style.color = 'var(--muted)';
+  const d = await post('/api/bot/validate', { bot_token: token, target_chat_id: chat });
+  spinner.classList.add('hidden');
+  if (d.ok) {
+    statusEl.textContent = '✓ @' + d.bot_username + ' พร้อมส่งแล้ว';
+    statusEl.style.color = 'var(--green)';
+  } else {
+    statusEl.textContent = '✗ ' + (d.error || 'ผิดพลาด');
+    statusEl.style.color = 'var(--red)';
+  }
+}
+
+async function startClone() {
+  const link  = document.getElementById('clone-link').value.trim();
+  const token = document.getElementById('clone-bot-token').value.trim();
+  const chat  = document.getElementById('clone-target-chat').value.trim();
+  if (!link)  { alert('กรอก link ข้อความแรกของ Topic ก่อนครับ'); return; }
+  if (!token || !chat) { alert('กรอก Bot Token และ Target Chat ID ก่อนครับ'); return; }
+  const d = await post('/api/clone/start', { link, bot_token: token, target_chat_id: chat });
+  if (d.ok) {
+    document.getElementById('prog-card').classList.remove('hidden');
+    document.getElementById('prog-card').scrollIntoView({ behavior: 'smooth' });
+    startPolling();
+  } else alert(d.error || 'ไม่สามารถเริ่มได้');
 }
 
 /* ─── Scan & Preview ─── */
@@ -871,6 +932,32 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
             if f.is_file():
                 f.unlink(); deleted += 1
         return jsonify({"ok": True, "deleted": deleted})
+
+    # ── Clone Topic ───────────────────────────────────────────────────────────
+
+    @app.route("/api/clone/start", methods=["POST"])
+    def clone_start():
+        if download_state["running"]:
+            return jsonify({"ok": False, "error": "มีงานค้างอยู่ รอให้เสร็จก่อนครับ"})
+        if not tg_client.is_authorized:
+            return jsonify({"ok": False, "error": "Not authenticated."})
+        data = request.get_json(force=True)
+        link  = data.get("link", "").strip()
+        token = data.get("bot_token", "").strip()
+        chat  = data.get("target_chat_id", "").strip()
+        max_gap = int(data.get("max_gap", 30))
+        if not link:
+            return jsonify({"ok": False, "error": "Link required."})
+        if not token or not chat:
+            return jsonify({"ok": False, "error": "Bot Token และ Target Chat ID จำเป็น"})
+        try:
+            parse_link(link)
+        except ValueError as e:
+            return jsonify({"ok": False, "error": str(e)})
+        forwarder = BotForwarder(token, chat)
+        dl = BatchDownloader(tg_client, download_state)
+        asyncio.run_coroutine_threadsafe(dl.clone_topic(link, forwarder, max_gap), loop)
+        return jsonify({"ok": True})
 
     # ── Health check (required by Render) ─────────────────────────────────────
 
