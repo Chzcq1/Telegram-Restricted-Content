@@ -4,6 +4,11 @@ import logging
 import os
 import sys
 
+# Must create event loop before importing Pyrogram.
+# Python 3.10+ no longer auto-creates one, causing RuntimeError in pyrogram/sync.py.
+_loop = asyncio.new_event_loop()
+asyncio.set_event_loop(_loop)
+
 from src.client import UserClient
 from src.web import create_app
 
@@ -28,7 +33,7 @@ async def main():
     else:
         logger.info("Not authenticated yet — open the web interface to log in.")
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     flask_app = create_app(tg_client, loop)
 
     flask_thread = threading.Thread(
