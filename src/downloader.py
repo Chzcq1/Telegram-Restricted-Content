@@ -55,6 +55,60 @@ class BotForwarder:
         except Exception as e:
             return False, str(e)
 
+    def send_album(self, items: list) -> tuple:
+        """Send multiple files as a Telegram album (sendMediaGroup).
+
+        items: list of dicts with keys: path (Path), caption (str), type (str)
+        Returns (ok: bool, error: str).
+        Max 10 items per album — caller must chunk if needed.
+        """
+        import json as _json
+
+        media_json = []
+        files_payload = {}
+
+        for i, item in enumerate(items[:10]):
+            path: Path = item["path"]
+            caption: str = item.get("caption", "")
+            ext = path.suffix.lower()
+
+            if ext in (".mp4", ".mov", ".avi", ".mkv", ".webm"):
+                media_type = "video"
+            elif ext in (".jpg", ".jpeg", ".png", ".webp", ".bmp"):
+                media_type = "photo"
+            elif ext in (".mp3", ".ogg", ".m4a", ".flac", ".wav"):
+                media_type = "audio"
+            else:
+                media_type = "document"
+
+            attach_key = f"file{i}"
+            entry = {"type": media_type, "media": f"attach://{attach_key}"}
+            if caption and i == 0:
+                entry["caption"] = caption[:1024]
+            media_json.append(entry)
+            files_payload[attach_key] = open(path, "rb")
+
+        try:
+            resp = _requests.post(
+                f"{self._base}/sendMediaGroup",
+                data={
+                    "chat_id": self.target_chat_id,
+                    "media": _json.dumps(media_json),
+                },
+                files=files_payload,
+                timeout=600,
+            )
+            data = resp.json()
+            return (True, "") if data.get("ok") else (False, data.get("description", "Unknown error"))
+        except Exception as e:
+            return False, str(e)
+        finally:
+            for f in files_payload.values():
+                try:
+                    f.close()
+                except Exception:
+                    pass
+
     def send_text(self, text: str) -> tuple:
         """Send a plain text message to target chat. Returns (ok: bool, error: str)."""
         try:
@@ -283,7 +337,11 @@ class BatchDownloader:
     # ── Clone entire topic ────────────────────────────────────────────────────
 
     async def clone_topic(self, link: str, forwarder: BotForwarder, max_gap: int = 30):
-        """Scan all messages forward from the given link and forward them via bot."""
+        """Scan all messages forward from the given link and forward them via bot.
+
+        Messages belonging to the same media album (media_group_id) are buffered
+        and sent together as a single sendMediaGroup call.
+        """
         self.state.update({
             "running": True, "total": 0, "current": 0,
             "downloaded": 0, "skipped": 0,
@@ -291,6 +349,47 @@ class BatchDownloader:
             "log": [], "new_files": [],
             "forward_mode": True,
         })
+
+        # Album buffer: list of {path, caption, msg_id}
+        album_buffer: list = []
+        current_album_id: Optional[str] = None
+
+        async def flush_album():
+            """Send buffered album items as a media group, then delete files."""
+            nonlocal album_buffer, current_album_id
+            if not album_buffer:
+                return
+            ids_str = ",".join(str(it["msg_id"]) for it in album_buffer)
+            self._log(f"[album {ids_str}] ส่งเป็น album ({len(album_buffer)} ไฟล์)…")
+            self.state["current_file"] = f"album [{ids_str}] — sending…"
+
+            # sendMediaGroup supports max 10 items — chunk if needed
+            chunks = [album_buffer[i:i+10] for i in range(0, len(album_buffer), 10)]
+            all_ok = True
+            for chunk in chunks:
+                ok, err = forwarder.send_album(chunk)
+                if ok:
+                    for it in chunk:
+                        Path(it["path"]).unlink(missing_ok=True)
+                    self.state["downloaded"] += len(chunk)
+                    self._log(f"  ✓ {len(chunk)} ไฟล์ส่งสำเร็จ & ลบแล้ว")
+                else:
+                    self._log(f"  ✗ album send failed ({err}) — ลองส่งทีละไฟล์…")
+                    # Fallback: send individually
+                    for it in chunk:
+                        p = Path(it["path"])
+                        fok, ferr = forwarder.send_file(p, caption=it.get("caption", ""))
+                        if fok:
+                            p.unlink(missing_ok=True)
+                            self.state["downloaded"] += 1
+                        else:
+                            self._log(f"  ✗ [{it['msg_id']}] fallback failed ({ferr})")
+                            self.state["skipped"] += 1
+                            all_ok = False
+
+            album_buffer.clear()
+            current_album_id = None
+
         try:
             chat_id, base_id = parse_link(link)
             self._log(f"Clone started — chat: {chat_id}, from msg {base_id}")
@@ -300,7 +399,6 @@ class BatchDownloader:
             consecutive_empty = 0
 
             while self.state["running"]:
-                # Fetch 50 messages at a time
                 batch_ids = list(range(msg_id, msg_id + 50))
                 try:
                     messages = await self.tg.client.get_messages(chat_id, batch_ids)
@@ -308,21 +406,21 @@ class BatchDownloader:
                     self._log(f"Fetch error at {msg_id}: {e}")
                     break
 
-                # Pyrogram may return a single Message or list
                 if not isinstance(messages, list):
                     messages = [messages]
 
-                all_empty_in_batch = True
                 for msg in messages:
                     if not self.state["running"]:
                         self._log("Cancelled.")
+                        await flush_album()
                         return
 
-                    # Detect real content
                     has_media = bool(msg and msg.media)
                     has_text  = bool(msg and msg.text and msg.text.strip())
 
                     if not has_media and not has_text:
+                        # Empty message — flush pending album before counting gaps
+                        await flush_album()
                         consecutive_empty += 1
                         if consecutive_empty >= max_gap:
                             self._log(f"ไม่พบข้อความ {max_gap} อันติดกัน — สิ้นสุด Topic")
@@ -330,13 +428,18 @@ class BatchDownloader:
                             break
                         continue
 
-                    # Found real content — reset gap counter
                     consecutive_empty = 0
-                    all_empty_in_batch = False
                     self.state["total"] = max(self.state["total"], msg.id - base_id + 1)
                     self.state["current"] = msg.id - base_id + 1
 
                     if has_media:
+                        group_id = getattr(msg, "media_group_id", None)
+
+                        # If message belongs to a different album, flush the old one first
+                        if group_id != current_album_id:
+                            await flush_album()
+                            current_album_id = group_id
+
                         media_label = str(msg.media).split(".")[-1]
                         self._log(f"[{msg.id}] {media_label} — downloading…")
                         self.state["current_file"] = f"msg {msg.id}"
@@ -355,18 +458,27 @@ class BatchDownloader:
                                 progress=make_progress(msg.id),
                             )
                             if path:
-                                filename = os.path.basename(path)
-                                self.state["current_file"] = f"msg {msg.id} — sending…"
-                                caption = getattr(msg, "caption", "") or getattr(msg, "text", "") or ""
-                                ok, err = forwarder.send_file(Path(path), caption=caption)
-                                if ok:
-                                    Path(path).unlink(missing_ok=True)
-                                    self._log(f"[{msg.id}] ✓ forwarded & deleted")
-                                    self.state["downloaded"] += 1
+                                caption = getattr(msg, "caption", "") or ""
+                                if group_id:
+                                    # Buffer for album send
+                                    album_buffer.append({
+                                        "path": path,
+                                        "caption": caption,
+                                        "msg_id": msg.id,
+                                    })
+                                    self._log(f"[{msg.id}] ✓ downloaded — รอส่งพร้อม album")
                                 else:
-                                    self._log(f"[{msg.id}] ✗ send failed ({err}) — kept on server")
-                                    self.state["skipped"] += 1
-                                    self.state["new_files"].append(filename)
+                                    # Single file — send immediately
+                                    self.state["current_file"] = f"msg {msg.id} — sending…"
+                                    ok, err = forwarder.send_file(Path(path), caption=caption)
+                                    if ok:
+                                        Path(path).unlink(missing_ok=True)
+                                        self._log(f"[{msg.id}] ✓ forwarded & deleted")
+                                        self.state["downloaded"] += 1
+                                    else:
+                                        self._log(f"[{msg.id}] ✗ send failed ({err}) — kept on server")
+                                        self.state["skipped"] += 1
+                                        self.state["new_files"].append(os.path.basename(path))
                             else:
                                 self._log(f"[{msg.id}] ไม่สามารถโหลดไฟล์ได้ — skipped")
                                 self.state["skipped"] += 1
@@ -375,6 +487,8 @@ class BatchDownloader:
                             self.state["skipped"] += 1
 
                     elif has_text:
+                        # Text message — flush any pending album first
+                        await flush_album()
                         self._log(f"[{msg.id}] text — sending…")
                         ok, err = forwarder.send_text(msg.text)
                         if ok:
@@ -388,6 +502,9 @@ class BatchDownloader:
                     break
 
                 msg_id += 50
+
+            # Flush any remaining album at end
+            await flush_album()
 
             self._log(
                 f"Clone done — {self.state['downloaded']} forwarded, "
