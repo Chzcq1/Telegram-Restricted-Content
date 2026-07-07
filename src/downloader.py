@@ -382,15 +382,22 @@ class BatchDownloader:
                         self.state["skipped"] += 1
                         continue
 
+                    p = Path(path)
+                    if not p.exists() or p.stat().st_size == 0:
+                        p.unlink(missing_ok=True)
+                        self._log(f"[{msg_id}] ไฟล์ว่างเปล่า (0 B) — skipped")
+                        self.state["skipped"] += 1
+                        continue
+
                     self.state["current_file"] = f"msg {msg_id} กำลังส่ง…"
                     label = str(msg.media).split(".")[-1]
-                    ok = await self._user_send(msg, Path(path), to_chat, thread_id)
+                    ok = await self._user_send(msg, p, to_chat, thread_id)
                     if ok:
                         self._log(f"[{msg_id}] ✓ ส่งสำเร็จ ({label})")
                         self.state["downloaded"] += 1
                     else:
                         # Keep file on server if send failed
-                        self.state["new_files"].append(os.path.basename(path))
+                        self.state["new_files"].append(p.name)
                         self.state["skipped"] += 1
 
                 elif msg.text and msg.text.strip():
@@ -477,19 +484,25 @@ class BatchDownloader:
                                 file_name=str(DOWNLOADS_DIR) + "/",
                                 progress=make_progress(msg.id),
                             )
-                            if path:
-                                self.state["current_file"] = f"msg {msg.id} กำลังส่ง…"
-                                label = str(msg.media).split(".")[-1]
-                                ok = await self._user_send(msg, Path(path), target, thread_id)
-                                if ok:
-                                    self._log(f"[{msg.id}] ✓ ส่งสำเร็จ ({label})")
-                                    self.state["downloaded"] += 1
-                                else:
-                                    self.state["new_files"].append(os.path.basename(path))
-                                    self.state["skipped"] += 1
-                            else:
+                            if not path:
                                 self._log(f"[{msg.id}] ดาวน์โหลดไม่ได้ — skipped")
                                 self.state["skipped"] += 1
+                            else:
+                                p = Path(path)
+                                if not p.exists() or p.stat().st_size == 0:
+                                    p.unlink(missing_ok=True)
+                                    self._log(f"[{msg.id}] ไฟล์ว่างเปล่า (0 B) — skipped")
+                                    self.state["skipped"] += 1
+                                else:
+                                    self.state["current_file"] = f"msg {msg.id} กำลังส่ง…"
+                                    label = str(msg.media).split(".")[-1]
+                                    ok = await self._user_send(msg, p, target, thread_id)
+                                    if ok:
+                                        self._log(f"[{msg.id}] ✓ ส่งสำเร็จ ({label})")
+                                        self.state["downloaded"] += 1
+                                    else:
+                                        self.state["new_files"].append(p.name)
+                                        self.state["skipped"] += 1
                         except Exception as e:
                             self._log(f"[{msg.id}] error: {e}")
                             self.state["skipped"] += 1
