@@ -175,8 +175,21 @@ class BatchDownloader:
     def _log(self, msg: str):
         ts = datetime.datetime.now().strftime("%H:%M:%S")
         entry = f"[{ts}] {msg}"
-        self.state["log"].append(entry)
+        log = self.state["log"]
+        log.append(entry)
+        # Keep only the most recent 300 entries to prevent memory bloat
+        # and huge JSON payloads on every status poll.
+        if len(log) > 300:
+            del log[:-300]
         print(entry)
+
+    @staticmethod
+    def _make_link(chat_id, msg_id: int) -> str:
+        """Reconstruct a t.me link from a chat_id and message ID."""
+        if isinstance(chat_id, int):
+            # chat_id is like -1001234567890; strip the "-100" prefix for t.me/c/
+            return f"https://t.me/c/{str(chat_id)[4:]}/{msg_id}"
+        return f"https://t.me/{chat_id}/{msg_id}"
 
     # ── Thumbnail Scanner ──────────────────────────────────────────────────────
 
@@ -255,7 +268,7 @@ class BatchDownloader:
             "running": True, "total": count, "current": 0,
             "downloaded": 0, "skipped": 0,
             "current_file": "", "current_progress": 0,
-            "log": [], "new_files": [],
+            "log": [], "new_files": [], "last_link": "",
             "forward_mode": True,
         })
         try:
@@ -280,7 +293,7 @@ class BatchDownloader:
             "running": True, "total": len(msg_ids), "current": 0,
             "downloaded": 0, "skipped": 0,
             "current_file": "", "current_progress": 0,
-            "log": [], "new_files": [],
+            "log": [], "new_files": [], "last_link": "",
             "forward_mode": True,
         })
         try:
@@ -354,6 +367,7 @@ class BatchDownloader:
                     self._log(f"✅ #{i+1}/{total} ({label})")
                     self.state["downloaded"] += 1
                     self.state["current_progress"] = 100
+                    self.state["last_link"] = self._make_link(from_chat, msg_id)
                 else:
                     self.state["skipped"] += 1
 
@@ -373,7 +387,7 @@ class BatchDownloader:
             "running": True, "total": 0, "current": 0,
             "downloaded": 0, "skipped": 0,
             "current_file": "", "current_progress": 0,
-            "log": [], "new_files": [],
+            "log": [], "new_files": [], "last_link": "",
             "forward_mode": True,
         })
         try:
@@ -427,6 +441,7 @@ class BatchDownloader:
                         self._log(f"✅ [{msg.id}] ({label})")
                         self.state["downloaded"] += 1
                         self.state["current_progress"] = 100
+                        self.state["last_link"] = self._make_link(chat_id, msg.id)
                     else:
                         self.state["skipped"] += 1
 
@@ -451,7 +466,7 @@ class BatchDownloader:
             "running": True, "total": count, "current": 0,
             "downloaded": 0, "skipped": 0,
             "current_file": "", "current_progress": 0,
-            "log": [], "new_files": [],
+            "log": [], "new_files": [], "last_link": "",
             "forward_mode": forwarder is not None,
         })
         try:
@@ -473,7 +488,7 @@ class BatchDownloader:
             "running": True, "total": count, "current": 0,
             "downloaded": 0, "skipped": 0,
             "current_file": "", "current_progress": 0,
-            "log": [], "new_files": [],
+            "log": [], "new_files": [], "last_link": "",
             "forward_mode": forwarder is not None,
         })
         try:
@@ -532,6 +547,7 @@ class BatchDownloader:
                             Path(path).unlink(missing_ok=True)
                             self._log(f"[{msg_id}] forwarded & deleted: {filename}")
                             self.state["downloaded"] += 1
+                            self.state["last_link"] = self._make_link(chat_id, msg_id)
                         else:
                             self._log(f"[{msg_id}] send failed ({err}) — kept: {filename}")
                             self.state["skipped"] += 1
@@ -540,6 +556,7 @@ class BatchDownloader:
                         self._log(f"[{msg_id}] saved: {filename}")
                         self.state["downloaded"] += 1
                         self.state["new_files"].append(filename)
+                        self.state["last_link"] = self._make_link(chat_id, msg_id)
                 else:
                     self._log(f"[{msg_id}] no output path — skipped")
                     self.state["skipped"] += 1
@@ -565,7 +582,7 @@ class BatchDownloader:
             "running": True, "total": 0, "current": 0,
             "downloaded": 0, "skipped": 0,
             "current_file": "", "current_progress": 0,
-            "log": [], "new_files": [],
+            "log": [], "new_files": [], "last_link": "",
             "forward_mode": True,
         })
 
@@ -694,6 +711,7 @@ class BatchDownloader:
                                         Path(path).unlink(missing_ok=True)
                                         self._log(f"[{msg.id}] ✓ forwarded & deleted")
                                         self.state["downloaded"] += 1
+                                        self.state["last_link"] = self._make_link(chat_id, msg.id)
                                     else:
                                         self._log(f"[{msg.id}] ✗ send failed ({err}) — kept on server")
                                         self.state["skipped"] += 1
@@ -713,6 +731,7 @@ class BatchDownloader:
                         if ok:
                             self._log(f"[{msg.id}] ✓ text sent")
                             self.state["downloaded"] += 1
+                            self.state["last_link"] = self._make_link(chat_id, msg.id)
                         else:
                             self._log(f"[{msg.id}] ✗ text failed ({err})")
                             self.state["skipped"] += 1

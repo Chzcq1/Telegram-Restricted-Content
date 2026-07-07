@@ -440,6 +440,13 @@ INDEX_HTML = r"""<!DOCTYPE html>
     <div id="prog-track" class="mb-2"><div id="prog-fill" style="width:0%"></div></div>
     <p id="prog-file" class="text-xs mb-4 truncate font-mono" style="color:var(--muted)"></p>
     <div id="log-box"></div>
+    <div id="last-link-box" class="hidden mt-3 p-3" style="background:var(--surface);border:1px solid var(--border);border-radius:8px">
+      <p class="text-xs font-bold mb-2" style="color:var(--accent);letter-spacing:.06em">📌 Last sent — copy to resume from here next time</p>
+      <div class="flex items-center gap-2">
+        <input id="last-link-val" type="text" readonly style="font-family:monospace;font-size:.75rem;flex:1;cursor:text" onclick="this.select()"/>
+        <button class="btn btn-ghost" style="padding:5px 12px;font-size:.75rem" onclick="copyLastLink()">Copy</button>
+      </div>
+    </div>
   </div>
 
   <!-- File manager card -->
@@ -777,7 +784,28 @@ async function pollStatus() {
     clearInterval(polling); polling = null;
     if (pct >= 100 || d.downloaded > 0) fill.classList.add('done');
     loadFiles();
+    const llBox = document.getElementById('last-link-box');
+    if (d.last_link) {
+      document.getElementById('last-link-val').value = d.last_link;
+      llBox.classList.remove('hidden');
+    } else {
+      llBox.classList.add('hidden');
+    }
   }
+}
+
+function copyLastLink() {
+  const val = document.getElementById('last-link-val').value;
+  if (!val) return;
+  navigator.clipboard.writeText(val).then(() => {
+    const btn = document.querySelector('#last-link-box button');
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  }).catch(() => {
+    document.getElementById('last-link-val').select();
+    document.execCommand('copy');
+  });
 }
 
 /* ─── File manager ─── */
@@ -920,7 +948,7 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
         "running": False, "total": 0, "current": 0,
         "downloaded": 0, "skipped": 0,
         "current_file": "", "current_progress": 0,
-        "log": [], "new_files": [],
+        "log": [], "new_files": [], "last_link": "",
     }
 
     def run_async(coro, timeout=30):
