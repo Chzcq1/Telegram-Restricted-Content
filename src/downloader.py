@@ -372,7 +372,7 @@ class BatchDownloader:
                     self.state["downloaded"] += 1
                     self.state["current_progress"] = 100
                     self.state["last_link"] = self._make_link(from_chat, msg_id)
-                    await asyncio.sleep(0.5)  # ป้องกัน FloodWait
+                    await asyncio.sleep(2)  # 30 msg/min — ต่ำกว่า Telegram rate limit
                 else:
                     self.state["skipped"] += 1
 
@@ -447,7 +447,7 @@ class BatchDownloader:
                         self.state["downloaded"] += 1
                         self.state["current_progress"] = 100
                         self.state["last_link"] = self._make_link(chat_id, msg.id)
-                        await asyncio.sleep(0.5)  # ป้องกัน FloodWait
+                        await asyncio.sleep(2)  # 30 msg/min — ต่ำกว่า Telegram rate limit
                     else:
                         self.state["skipped"] += 1
 
