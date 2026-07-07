@@ -290,21 +290,56 @@ class BatchDownloader:
         finally:
             self._finish()
 
+    # Telegram's inline player only streams H.264/AAC MP4 reliably
+    _STREAMABLE_EXTS = {".mp4", ".m4v"}
+
     async def _user_send(self, msg, path: Path, to_chat, thread_id=None,
                          max_retries: int = 5) -> bool:
         """Download-then-send one message via the user account, then delete the file.
-        Retries automatically on FloodWait. Returns True on success."""
+
+        Video routing:
+          .mp4 / .m4v  → send_video (supports_streaming=True, plays inline)
+          MKV/TS/AVI/… → send_document (always downloadable, never broken bubble)
+        Retries automatically on FloodWait. Returns True on success.
+        """
         from pyrogram.errors import FloodWait
         caption = getattr(msg, "caption", "") or ""
         kwargs = {"caption": caption}
         if thread_id:
             kwargs["message_thread_id"] = thread_id
 
+        ext = path.suffix.lower()
+        is_video_msg = bool(
+            msg.video or (
+                msg.document and msg.document.mime_type
+                and msg.document.mime_type.startswith("video")
+            )
+        )
+
         for attempt in range(max_retries):
             try:
-                if msg.video or (msg.document and msg.document.mime_type and
-                                  msg.document.mime_type.startswith("video")):
-                    await self.tg.client.send_video(to_chat, video=str(path), **kwargs)
+                if is_video_msg and ext in self._STREAMABLE_EXTS:
+                    # MP4 → inline playback; carry over original metadata
+                    vid_kw = dict(kwargs)
+                    vid_kw["supports_streaming"] = True
+                    src = msg.video or None
+                    if src:
+                        if getattr(src, "duration", None):
+                            vid_kw["duration"] = src.duration
+                        if getattr(src, "width", None):
+                            vid_kw["width"] = src.width
+                        if getattr(src, "height", None):
+                            vid_kw["height"] = src.height
+                    await self.tg.client.send_video(to_chat, video=str(path), **vid_kw)
+                elif is_video_msg:
+                    # Non-MP4 (MKV/TS/AVI/…) — send as document so it's always
+                    # downloadable and never shows as a broken 0:00 bubble
+                    self._log(
+                        f"[{msg.id}] {ext} ไม่ใช่ MP4 → ส่งเป็น document"
+                    )
+                    await self.tg.client.send_document(
+                        to_chat, document=str(path), **kwargs
+                    )
                 elif msg.photo:
                     await self.tg.client.send_photo(to_chat, photo=str(path), **kwargs)
                 elif msg.audio:
@@ -312,9 +347,13 @@ class BatchDownloader:
                 elif msg.voice:
                     await self.tg.client.send_voice(to_chat, voice=str(path), **kwargs)
                 elif msg.animation:
-                    await self.tg.client.send_animation(to_chat, animation=str(path), **kwargs)
+                    await self.tg.client.send_animation(
+                        to_chat, animation=str(path), **kwargs
+                    )
                 else:
-                    await self.tg.client.send_document(to_chat, document=str(path), **kwargs)
+                    await self.tg.client.send_document(
+                        to_chat, document=str(path), **kwargs
+                    )
                 path.unlink(missing_ok=True)
                 return True
             except FloodWait as e:
