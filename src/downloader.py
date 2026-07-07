@@ -330,8 +330,12 @@ class BatchDownloader:
                 return True
             except FloodWait as e:
                 wait = e.value + 1
-                self.state["current_file"] = f"⏳ FloodWait {wait}s…"
-                await asyncio.sleep(wait)
+                self._log(f"⏳ FloodWait {wait}s — รอ Telegram อนุญาตก่อน…")
+                for remaining in range(wait, 0, -1):
+                    if not self.state["running"]:
+                        break
+                    self.state["current_file"] = f"⏳ FloodWait — รอ {remaining}s…"
+                    await asyncio.sleep(1)
             except Exception as e:
                 self._log(f"⚠️ [{msg_id}] copy error: {e}")
                 return False
