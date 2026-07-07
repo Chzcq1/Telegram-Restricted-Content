@@ -137,6 +137,26 @@ def parse_link(link: str):
     raise ValueError(f"Unrecognised link format: {link}")
 
 
+def parse_target_chat(to_chat_id: str):
+    """Parse target chat ID, supporting 'chatid_threadid' format for forum topics.
+    Returns (chat_id: int|str, thread_id: int|None).
+    Examples:
+      '-1001234567890'     → (-1001234567890, None)
+      '-1001234567890_5'   → (-1001234567890, 5)
+      '@mychannel'         → ('@mychannel', None)
+    """
+    s = to_chat_id.strip()
+    if "_" in s:
+        parts = s.rsplit("_", 1)
+        if parts[1].isdigit():
+            chat_part = parts[0]
+            thread_id = int(parts[1])
+            chat_id = int(chat_part) if chat_part.lstrip("-").isdigit() else chat_part
+            return chat_id, thread_id
+    chat_id = int(s) if s.lstrip("-").isdigit() else s
+    return chat_id, None
+
+
 def _fmt_size(size: int) -> str:
     if size >= 1_073_741_824:
         return f"{size / 1_073_741_824:.1f} GB"
@@ -229,15 +249,8 @@ class BatchDownloader:
 
     async def copy_to_chat(self, link: str, count: int, start_offset: int = 0,
                            to_chat_id: str = ""):
-        """Copy messages directly between chats using the user account.
-        No download/upload — Telegram handles it server-side.
-        Supports any file size. to_chat_id must be a chat the user account can post in.
-        """
-        target = to_chat_id.strip()
-        # Convert numeric string to int
-        if target.lstrip("-").isdigit():
-            target = int(target)
-
+        """Download each message, send via user account, delete — one at a time."""
+        target, thread_id = parse_target_chat(to_chat_id)
         self.state.update({
             "running": True, "total": count, "current": 0,
             "downloaded": 0, "skipped": 0,
@@ -248,8 +261,9 @@ class BatchDownloader:
         try:
             chat_id, base_id = parse_link(link)
             start_id = base_id + start_offset
-            self._log(f"User-copy started — from {chat_id}, IDs {start_id}→{start_id+count-1}, to {target}")
-            await self._copy_ids(chat_id, list(range(start_id, start_id + count)), target)
+            self._log(f"User-send started — from {chat_id}, IDs {start_id}→{start_id+count-1}, to {target}"
+                      + (f" (thread {thread_id})" if thread_id else ""))
+            await self._copy_ids(chat_id, list(range(start_id, start_id + count)), target, thread_id)
         except Exception as e:
             self._log(f"Fatal error: {e}")
         finally:
@@ -257,11 +271,8 @@ class BatchDownloader:
 
     async def copy_specific_to_chat(self, link: str, msg_ids: List[int],
                                     to_chat_id: str = ""):
-        """Copy specific message IDs via user account."""
-        target = to_chat_id.strip()
-        if target.lstrip("-").isdigit():
-            target = int(target)
-
+        """Download specific messages, send via user account, delete."""
+        target, thread_id = parse_target_chat(to_chat_id)
         self.state.update({
             "running": True, "total": len(msg_ids), "current": 0,
             "downloaded": 0, "skipped": 0,
@@ -271,37 +282,74 @@ class BatchDownloader:
         })
         try:
             chat_id, _ = parse_link(link)
-            self._log(f"User-copy {len(msg_ids)} messages from {chat_id} → {target}")
-            await self._copy_ids(chat_id, msg_ids, target)
+            self._log(f"User-send {len(msg_ids)} messages from {chat_id} → {target}"
+                      + (f" (thread {thread_id})" if thread_id else ""))
+            await self._copy_ids(chat_id, msg_ids, target, thread_id)
         except Exception as e:
             self._log(f"Fatal error: {e}")
         finally:
             self._finish()
 
-    async def _safe_copy(self, to_chat, from_chat, msg_id, max_retries: int = 5):
-        """Copy one message with automatic FloodWait retry. Returns True on success."""
+    async def _user_send(self, msg, path: Path, to_chat, thread_id=None,
+                         max_retries: int = 5) -> bool:
+        """Download-then-send one message via the user account, then delete the file.
+        Retries automatically on FloodWait. Returns True on success."""
         from pyrogram.errors import FloodWait
+        caption = getattr(msg, "caption", "") or ""
+        kwargs = {"caption": caption}
+        if thread_id:
+            kwargs["message_thread_id"] = thread_id
+
         for attempt in range(max_retries):
             try:
-                await self.tg.client.copy_message(
-                    chat_id=to_chat,
-                    from_chat_id=from_chat,
-                    message_id=msg_id,
-                )
+                if msg.video or (msg.document and msg.document.mime_type and
+                                  msg.document.mime_type.startswith("video")):
+                    await self.tg.client.send_video(to_chat, video=str(path), **kwargs)
+                elif msg.photo:
+                    await self.tg.client.send_photo(to_chat, photo=str(path), **kwargs)
+                elif msg.audio:
+                    await self.tg.client.send_audio(to_chat, audio=str(path), **kwargs)
+                elif msg.voice:
+                    await self.tg.client.send_voice(to_chat, voice=str(path), **kwargs)
+                elif msg.animation:
+                    await self.tg.client.send_animation(to_chat, animation=str(path), **kwargs)
+                else:
+                    await self.tg.client.send_document(to_chat, document=str(path), **kwargs)
+                path.unlink(missing_ok=True)
                 return True
             except FloodWait as e:
                 wait = e.value + 1
-                self._log(f"[{msg_id}] FloodWait {wait}s — รอสักครู่…")
-                self.state["current_file"] = f"msg {msg_id} — FloodWait {wait}s"
+                self._log(f"[{msg.id}] FloodWait {wait}s — รอสักครู่…")
+                self.state["current_file"] = f"msg {msg.id} — FloodWait {wait}s"
                 await asyncio.sleep(wait)
             except Exception as e:
-                self._log(f"[{msg_id}] error: {e}")
+                self._log(f"[{msg.id}] send error: {e}")
                 return False
-        self._log(f"[{msg_id}] หมด retry — skipped")
+        self._log(f"[{msg.id}] หมด retry — skipped")
         return False
 
-    async def _copy_ids(self, from_chat, msg_ids: List[int], to_chat):
-        """Server-side copy loop — fastest possible, retries on FloodWait."""
+    async def _user_send_text(self, msg, to_chat, thread_id=None,
+                              max_retries: int = 5) -> bool:
+        """Send a text message via user account with FloodWait retry."""
+        from pyrogram.errors import FloodWait
+        kwargs = {}
+        if thread_id:
+            kwargs["message_thread_id"] = thread_id
+        for attempt in range(max_retries):
+            try:
+                await self.tg.client.send_message(to_chat, msg.text, **kwargs)
+                return True
+            except FloodWait as e:
+                wait = e.value + 1
+                self._log(f"[{msg.id}] FloodWait {wait}s — รอสักครู่…")
+                await asyncio.sleep(wait)
+            except Exception as e:
+                self._log(f"[{msg.id}] text send error: {e}")
+                return False
+        return False
+
+    async def _copy_ids(self, from_chat, msg_ids: List[int], to_chat, thread_id=None):
+        """Download → send via user account → delete, one at a time."""
         for i, msg_id in enumerate(msg_ids):
             if not self.state["running"]:
                 self._log("Cancelled.")
@@ -314,27 +362,58 @@ class BatchDownloader:
                     self._log(f"[{msg_id}] No content — skipped")
                     self.state["skipped"] += 1
                     continue
-                ok = await self._safe_copy(to_chat, from_chat, msg_id)
-                if ok:
-                    label = str(msg.media).split(".")[-1] if msg.media else "text"
-                    self._log(f"[{msg_id}] ✓ copied ({label})")
-                    self.state["downloaded"] += 1
-                else:
-                    self.state["skipped"] += 1
+
+                if msg.media:
+                    def make_progress(mid):
+                        def _cb(cur, tot):
+                            if tot:
+                                pct = int(cur * 100 / tot)
+                                self.state["current_progress"] = pct
+                                self.state["current_file"] = f"msg {mid} ดาวน์โหลด {pct}%"
+                        return _cb
+
+                    path = await self.tg.client.download_media(
+                        msg,
+                        file_name=str(DOWNLOADS_DIR) + "/",
+                        progress=make_progress(msg_id),
+                    )
+                    if not path:
+                        self._log(f"[{msg_id}] ดาวน์โหลดไม่ได้ — skipped")
+                        self.state["skipped"] += 1
+                        continue
+
+                    self.state["current_file"] = f"msg {msg_id} กำลังส่ง…"
+                    label = str(msg.media).split(".")[-1]
+                    ok = await self._user_send(msg, Path(path), to_chat, thread_id)
+                    if ok:
+                        self._log(f"[{msg_id}] ✓ ส่งสำเร็จ ({label})")
+                        self.state["downloaded"] += 1
+                    else:
+                        # Keep file on server if send failed
+                        self.state["new_files"].append(os.path.basename(path))
+                        self.state["skipped"] += 1
+
+                elif msg.text and msg.text.strip():
+                    self.state["current_file"] = f"msg {msg_id} text — กำลังส่ง…"
+                    ok = await self._user_send_text(msg, to_chat, thread_id)
+                    if ok:
+                        self._log(f"[{msg_id}] ✓ ส่ง text สำเร็จ")
+                        self.state["downloaded"] += 1
+                    else:
+                        self.state["skipped"] += 1
+
             except Exception as e:
                 self._log(f"[{msg_id}] error: {e}")
                 self.state["skipped"] += 1
 
         self._log(
-            f"Done — {self.state['downloaded']} copied, "
+            f"Done — {self.state['downloaded']} ส่งสำเร็จ, "
             f"{self.state['skipped']} skipped."
         )
 
     async def clone_topic_user(self, link: str, to_chat_id: str, max_gap: int = 30):
-        """Clone entire topic using user account copy_message — no bot, no file size limit."""
-        target = to_chat_id.strip()
-        if target.lstrip("-").isdigit():
-            target = int(target)
+        """Clone entire topic — download each file, send via user account, delete."""
+        target, thread_id = parse_target_chat(to_chat_id)
 
         self.state.update({
             "running": True, "total": 0, "current": 0,
@@ -345,7 +424,8 @@ class BatchDownloader:
         })
         try:
             chat_id, base_id = parse_link(link)
-            self._log(f"User-clone started — from {chat_id} msg {base_id} → {target}")
+            self._log(f"User-clone started — from {chat_id} msg {base_id} → {target}"
+                      + (f" (thread {thread_id})" if thread_id else ""))
             self._log(f"Scanning forward (หยุดเมื่อไม่เจอข้อความ {max_gap} อันติดกัน)…")
 
             msg_id = base_id
@@ -382,20 +462,53 @@ class BatchDownloader:
                     self.state["current"] = msg.id - base_id + 1
                     self.state["current_file"] = f"msg {msg.id}"
 
-                    ok = await self._safe_copy(target, chat_id, msg.id)
-                    if ok:
-                        label = str(msg.media).split(".")[-1] if msg.media else "text"
-                        self._log(f"[{msg.id}] ✓ copied ({label})")
-                        self.state["downloaded"] += 1
-                    else:
-                        self.state["skipped"] += 1
+                    if msg.media:
+                        def make_progress(mid):
+                            def _cb(cur, tot):
+                                if tot:
+                                    pct = int(cur * 100 / tot)
+                                    self.state["current_progress"] = pct
+                                    self.state["current_file"] = f"msg {mid} ดาวน์โหลด {pct}%"
+                            return _cb
+
+                        try:
+                            path = await self.tg.client.download_media(
+                                msg,
+                                file_name=str(DOWNLOADS_DIR) + "/",
+                                progress=make_progress(msg.id),
+                            )
+                            if path:
+                                self.state["current_file"] = f"msg {msg.id} กำลังส่ง…"
+                                label = str(msg.media).split(".")[-1]
+                                ok = await self._user_send(msg, Path(path), target, thread_id)
+                                if ok:
+                                    self._log(f"[{msg.id}] ✓ ส่งสำเร็จ ({label})")
+                                    self.state["downloaded"] += 1
+                                else:
+                                    self.state["new_files"].append(os.path.basename(path))
+                                    self.state["skipped"] += 1
+                            else:
+                                self._log(f"[{msg.id}] ดาวน์โหลดไม่ได้ — skipped")
+                                self.state["skipped"] += 1
+                        except Exception as e:
+                            self._log(f"[{msg.id}] error: {e}")
+                            self.state["skipped"] += 1
+
+                    elif msg.text and msg.text.strip():
+                        self.state["current_file"] = f"msg {msg.id} text — กำลังส่ง…"
+                        ok = await self._user_send_text(msg, target, thread_id)
+                        if ok:
+                            self._log(f"[{msg.id}] ✓ ส่ง text สำเร็จ")
+                            self.state["downloaded"] += 1
+                        else:
+                            self.state["skipped"] += 1
 
                 if not self.state["running"]:
                     break
                 msg_id += 50
 
             self._log(
-                f"Clone done — {self.state['downloaded']} copied, "
+                f"Clone done — {self.state['downloaded']} ส่งสำเร็จ, "
                 f"{self.state['skipped']} skipped."
             )
         except Exception as e:
