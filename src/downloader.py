@@ -1,5 +1,6 @@
 import os
 import re
+import asyncio
 import base64
 import datetime
 import requests as _requests
@@ -277,8 +278,30 @@ class BatchDownloader:
         finally:
             self._finish()
 
+    async def _safe_copy(self, to_chat, from_chat, msg_id, max_retries: int = 5):
+        """Copy one message with automatic FloodWait retry. Returns True on success."""
+        from pyrogram.errors import FloodWait
+        for attempt in range(max_retries):
+            try:
+                await self.tg.client.copy_message(
+                    chat_id=to_chat,
+                    from_chat_id=from_chat,
+                    message_id=msg_id,
+                )
+                return True
+            except FloodWait as e:
+                wait = e.value + 1
+                self._log(f"[{msg_id}] FloodWait {wait}s — รอสักครู่…")
+                self.state["current_file"] = f"msg {msg_id} — FloodWait {wait}s"
+                await asyncio.sleep(wait)
+            except Exception as e:
+                self._log(f"[{msg_id}] error: {e}")
+                return False
+        self._log(f"[{msg_id}] หมด retry — skipped")
+        return False
+
     async def _copy_ids(self, from_chat, msg_ids: List[int], to_chat):
-        """Server-side copy loop using client.copy_message()."""
+        """Server-side copy loop — fastest possible, retries on FloodWait."""
         for i, msg_id in enumerate(msg_ids):
             if not self.state["running"]:
                 self._log("Cancelled.")
@@ -291,14 +314,13 @@ class BatchDownloader:
                     self._log(f"[{msg_id}] No content — skipped")
                     self.state["skipped"] += 1
                     continue
-                await self.tg.client.copy_message(
-                    chat_id=to_chat,
-                    from_chat_id=from_chat,
-                    message_id=msg_id,
-                )
-                label = str(msg.media).split(".")[-1] if msg.media else "text"
-                self._log(f"[{msg_id}] ✓ copied ({label})")
-                self.state["downloaded"] += 1
+                ok = await self._safe_copy(to_chat, from_chat, msg_id)
+                if ok:
+                    label = str(msg.media).split(".")[-1] if msg.media else "text"
+                    self._log(f"[{msg_id}] ✓ copied ({label})")
+                    self.state["downloaded"] += 1
+                else:
+                    self.state["skipped"] += 1
             except Exception as e:
                 self._log(f"[{msg_id}] error: {e}")
                 self.state["skipped"] += 1
@@ -360,17 +382,12 @@ class BatchDownloader:
                     self.state["current"] = msg.id - base_id + 1
                     self.state["current_file"] = f"msg {msg.id}"
 
-                    try:
-                        await self.tg.client.copy_message(
-                            chat_id=target,
-                            from_chat_id=chat_id,
-                            message_id=msg.id,
-                        )
+                    ok = await self._safe_copy(target, chat_id, msg.id)
+                    if ok:
                         label = str(msg.media).split(".")[-1] if msg.media else "text"
                         self._log(f"[{msg.id}] ✓ copied ({label})")
                         self.state["downloaded"] += 1
-                    except Exception as e:
-                        self._log(f"[{msg.id}] error: {e}")
+                    else:
                         self.state["skipped"] += 1
 
                 if not self.state["running"]:
