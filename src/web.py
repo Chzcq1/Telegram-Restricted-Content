@@ -1,12 +1,48 @@
 import os
 import asyncio
+from functools import wraps
 from pathlib import Path
-from flask import Flask, request, jsonify, send_from_directory, render_template_string
+from flask import Flask, request, jsonify, send_from_directory, render_template_string, session, redirect, url_for
 from src.downloader import BatchDownloader, BotForwarder, parse_link, _fmt_size
 
 DOWNLOADS_DIR = Path("downloads")
 DOWNLOADS_DIR.mkdir(exist_ok=True)
 PHONE_NUMBER = os.environ.get("PHONE_NUMBER", "")
+WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "")
+
+LOGIN_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>TG Downloader — Login</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background: #07090f; color: #e2e8f0; font-family: ui-sans-serif, system-ui, sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .card { background: #111827; border: 1px solid #1f2d45; border-radius: 14px; padding: 32px 28px; width: 100%; max-width: 360px; }
+  input[type=password] { background: #0d1017; border: 1px solid #1f2d45; color: #e2e8f0; border-radius: 8px; padding: 9px 12px; font-size: 0.875rem; width: 100%; outline: none; transition: border-color .2s; }
+  input:focus { border-color: #00d4ff; box-shadow: 0 0 0 2px #00d4ff15; }
+  .btn { border-radius: 8px; padding: 9px 18px; font-size: 0.875rem; font-weight: 600; cursor: pointer; border: none; width: 100%; background: #00d4ff; color: #000; margin-top: 12px; transition: background .15s; }
+  .btn:hover { background: #00bce0; }
+  .err { color: #ef4444; font-size: 0.8rem; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:24px">
+    <div style="width:28px;height:28px;background:linear-gradient(135deg,#7c3aed,#00d4ff);border-radius:7px"></div>
+    <span style="font-size:.875rem;font-weight:700;letter-spacing:.04em">TG DOWNLOADER</span>
+  </div>
+  <p style="font-size:.75rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:12px">Enter Password</p>
+  <form method="POST">
+    <input type="password" name="password" autofocus placeholder="Password" required/>
+    {% if error %}<p class="err">{{ error }}</p>{% endif %}
+    <button class="btn" type="submit">Unlock</button>
+  </form>
+</div>
+</body>
+</html>
+"""
 
 # ── HTML ──────────────────────────────────────────────────────────────────────
 
@@ -786,6 +822,35 @@ setInterval(checkAuth, 30000);
 
 def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
     app = Flask(__name__)
+    app.secret_key = os.environ.get("SESSION_SECRET", os.urandom(24))
+
+    def login_required(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if WEB_PASSWORD and not session.get("authenticated"):
+                if request.is_json:
+                    return jsonify({"ok": False, "error": "Unauthorized"}), 401
+                return redirect(url_for("login"))
+            return f(*args, **kwargs)
+        return decorated
+
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        if not WEB_PASSWORD:
+            session["authenticated"] = True
+            return redirect(url_for("index"))
+        error = None
+        if request.method == "POST":
+            if request.form.get("password") == WEB_PASSWORD:
+                session["authenticated"] = True
+                return redirect(url_for("index"))
+            error = "Incorrect password."
+        return render_template_string(LOGIN_HTML, error=error)
+
+    @app.route("/logout")
+    def logout():
+        session.clear()
+        return redirect(url_for("login"))
 
     download_state = {
         "running": False, "total": 0, "current": 0,
@@ -798,12 +863,14 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
         return asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=timeout)
 
     @app.route("/")
+    @login_required
     def index():
         return render_template_string(INDEX_HTML, phone=PHONE_NUMBER)
 
     # ── Auth ──────────────────────────────────────────────────────────────────
 
     @app.route("/api/auth/status")
+    @login_required
     def auth_status():
         if tg_client.credentials_missing:
             return jsonify({"authorized": False, "credentials_missing": True})
@@ -816,6 +883,7 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
         return jsonify({"authorized": False, "credentials_missing": False})
 
     @app.route("/api/auth/send_code", methods=["POST"])
+    @login_required
     def send_code():
         data = request.get_json(force=True)
         phone = data.get("phone", "").strip()
@@ -827,6 +895,7 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
             return jsonify({"ok": False, "error": str(e)})
 
     @app.route("/api/auth/sign_in", methods=["POST"])
+    @login_required
     def sign_in():
         data = request.get_json(force=True)
         try:
@@ -844,6 +913,7 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
     # ── Scan thumbnails ───────────────────────────────────────────────────────
 
     @app.route("/api/scan", methods=["POST"])
+    @login_required
     def scan():
         if not tg_client.is_authorized:
             return jsonify({"error": "Not authenticated."})
@@ -861,6 +931,7 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
     # ── Downloads ─────────────────────────────────────────────────────────────
 
     @app.route("/api/bot/validate", methods=["POST"])
+    @login_required
     def bot_validate():
         data = request.get_json(force=True)
         token = data.get("bot_token", "").strip()
@@ -874,6 +945,7 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
         return jsonify({"ok": False, "error": result})
 
     @app.route("/api/download/start", methods=["POST"])
+    @login_required
     def download_start():
         if download_state["running"]:
             return jsonify({"ok": False, "error": "Already running."})
@@ -901,6 +973,7 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
         return jsonify({"ok": True})
 
     @app.route("/api/download/start_ids", methods=["POST"])
+    @login_required
     def download_start_ids():
         if download_state["running"]:
             return jsonify({"ok": False, "error": "Already running."})
@@ -927,17 +1000,20 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
         return jsonify({"ok": True})
 
     @app.route("/api/download/stop", methods=["POST"])
+    @login_required
     def download_stop():
         download_state["running"] = False
         return jsonify({"ok": True})
 
     @app.route("/api/download/status")
+    @login_required
     def download_status():
         return jsonify(download_state)
 
     # ── Files ─────────────────────────────────────────────────────────────────
 
     @app.route("/api/files")
+    @login_required
     def list_files():
         files = []
         if DOWNLOADS_DIR.exists():
@@ -947,10 +1023,12 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
         return jsonify({"files": files})
 
     @app.route("/files/<path:filename>")
+    @login_required
     def serve_file(filename):
         return send_from_directory(str(DOWNLOADS_DIR.absolute()), filename, as_attachment=True)
 
     @app.route("/api/files/delete", methods=["POST"])
+    @login_required
     def delete_files():
         names = request.get_json(force=True).get("files", [])
         deleted = 0
@@ -961,6 +1039,7 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
         return jsonify({"ok": True, "deleted": deleted})
 
     @app.route("/api/files/delete_all", methods=["POST"])
+    @login_required
     def delete_all():
         deleted = 0
         for f in DOWNLOADS_DIR.iterdir():
@@ -971,6 +1050,7 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
     # ── Clone Topic ───────────────────────────────────────────────────────────
 
     @app.route("/api/clone/start", methods=["POST"])
+    @login_required
     def clone_start():
         if download_state["running"]:
             return jsonify({"ok": False, "error": "มีงานค้างอยู่ รอให้เสร็จก่อนครับ"})

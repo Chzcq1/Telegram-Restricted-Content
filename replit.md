@@ -16,11 +16,16 @@ Requires Telegram API credentials (get from https://my.telegram.org/auth):
 - `API_HASH` — app hash string
 - `PHONE_NUMBER` — (optional) pre-fills the login form
 
-## Running Locally
+## Running on Replit
 
-```bash
-python app.py
-```
+The workflow **Start application** runs `python app.py`. The web interface is available in the Preview tab on port 5000.
+
+Required secrets (set in Replit Secrets):
+- `API_ID` — Telegram app ID (from https://my.telegram.org/auth)
+- `API_HASH` — Telegram app hash
+- `SESSION_SECRET` — Flask session signing key (auto-generated if absent)
+- `WEB_PASSWORD` — Password to protect the web interface
+- `PHONE_NUMBER` — (optional) pre-fills the login form
 
 ## Deploying to Render
 
