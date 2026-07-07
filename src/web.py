@@ -318,12 +318,20 @@ INDEX_HTML = r"""<!DOCTYPE html>
     <!-- Mode toggle -->
     <div class="flex gap-1 p-1 mb-3" style="background:var(--surface);border-radius:8px;border:1px solid var(--border)">
       <button id="btn-mode-save" class="btn flex-1 btn-accent" onclick="setMode('save')" style="font-size:.75rem">💾 บันทึกลงเซิร์ฟเวอร์</button>
+      <button id="btn-mode-copy" class="btn flex-1 btn-ghost"  onclick="setMode('copy')" style="font-size:.75rem">👤 Copy via Account</button>
       <button id="btn-mode-fwd"  class="btn flex-1 btn-ghost"  onclick="setMode('forward')" style="font-size:.75rem">🤖 ส่งผ่านบอท</button>
+    </div>
+
+    <!-- User-copy config -->
+    <div id="copy-config" class="hidden mb-3 p-3 space-y-2" style="background:var(--surface);border-radius:8px;border:1px solid #10b98150">
+      <p class="text-xs font-bold" style="color:var(--green);letter-spacing:.06em">👤 Copy via Account — ไม่จำกัดขนาดไฟล์ ไม่ต้องดาวน์โหลด</p>
+      <p class="text-xs" style="color:var(--muted);line-height:1.6">บัญชีของคุณ copy ข้อความโดยตรง — รองรับคลิปทุกความยาว (ถึง 2GB) และทำงานเกือบทันที บัญชีของคุณต้องเป็นสมาชิกในกลุ่มปลายทาง</p>
+      <input id="copy-target-chat" type="text" placeholder="Target Chat ID หรือ @username  เช่น -1001234567890"/>
     </div>
 
     <!-- Bot config (forward mode only) -->
     <div id="bot-config" class="hidden mb-3 p-3 space-y-2" style="background:var(--surface);border-radius:8px;border:1px solid var(--accent)30">
-      <p class="text-xs font-bold" style="color:var(--accent);letter-spacing:.06em">⚙️ ตั้งค่าบอท</p>
+      <p class="text-xs font-bold" style="color:var(--accent);letter-spacing:.06em">⚙️ ตั้งค่าบอท (จำกัด 50MB ต่อไฟล์)</p>
       <input id="bot-token" type="password" placeholder="Bot Token (จาก @BotFather)"/>
       <input id="target-chat" type="text" placeholder="Target Chat ID  เช่น -1001234567890"/>
       <div class="flex items-center gap-2">
@@ -375,33 +383,49 @@ INDEX_HTML = r"""<!DOCTYPE html>
   <div id="clone-card" class="card p-5 hidden card-glow" style="border-color:#7c3aed30">
     <p class="section-label" style="color:var(--purple)">🔁 Clone Topic</p>
 
-    <!-- Flow explanation -->
-    <div class="mb-3" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.78rem;line-height:1.7">
+    <!-- Clone mode toggle -->
+    <div class="flex gap-1 p-1 mb-3" style="background:var(--surface);border-radius:8px;border:1px solid var(--border)">
+      <button id="btn-clone-copy" class="btn flex-1 btn-green" onclick="setCloneMode('copy')" style="font-size:.75rem">👤 Copy via Account ✨แนะนำ</button>
+      <button id="btn-clone-bot"  class="btn flex-1 btn-ghost"  onclick="setCloneMode('bot')"  style="font-size:.75rem">🤖 ส่งผ่านบอท</button>
+    </div>
+
+    <!-- Copy mode info -->
+    <div id="clone-copy-info" class="mb-3" style="background:var(--surface);border:1px solid #10b98150;border-radius:8px;padding:10px 12px;font-size:.78rem;line-height:1.7">
+      <p style="color:#86efac">✅ บัญชีของคุณ copy ข้อความโดยตรง — ไม่ดาวน์โหลด ไม่จำกัดขนาดไฟล์ รองรับคลิปทุกความยาว<br>✅ บัญชีของคุณต้องเป็นสมาชิกทั้งกลุ่มต้นทางและปลายทาง</p>
+    </div>
+
+    <!-- Bot mode info -->
+    <div id="clone-bot-info" class="hidden mb-3" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.78rem;line-height:1.7">
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
         <span style="background:#1d4ed8;padding:2px 8px;border-radius:6px;font-size:.72rem">👤 บัญชีของคุณ</span>
         <span style="color:var(--muted)">ดึงไฟล์จากกลุ่มต้นทาง</span>
         <span style="color:var(--muted)">→</span>
         <span style="background:#7c3aed;padding:2px 8px;border-radius:6px;font-size:.72rem">🤖 บอท</span>
-        <span style="color:var(--muted)">ส่งไปกลุ่มปลายทาง</span>
-        <span style="color:var(--muted)">→</span>
-        <span style="color:var(--muted)">🗑 ลบทิ้ง</span>
+        <span style="color:var(--muted)">ส่งไปกลุ่มปลายทาง (จำกัด 50MB)</span>
       </div>
-      <p class="mt-1" style="color:#86efac">✅ บอทไม่ต้องอยู่ในกลุ่มต้นทาง — บัญชีของคุณเป็นคนดึงข้อมูล<br>⚠️ บอทต้องเป็นสมาชิกในกลุ่ม<strong>ปลายทาง</strong>เท่านั้น</p>
+      <p class="mt-1" style="color:#fca5a5">⚠️ บอทจำกัดไฟล์ 50MB — คลิปยาวๆ อาจดูได้แค่บางส่วน</p>
     </div>
 
     <div class="space-y-3">
       <input id="clone-link" type="text" placeholder="Link ข้อความแรกของ Topic  เช่น https://t.me/c/1234567890/100"/>
-      <input id="clone-bot-token" type="password" placeholder="Bot Token (จาก @BotFather)"/>
-      <input id="clone-target-chat" type="text" placeholder="Chat ID กลุ่มปลายทาง (บอทต้องอยู่ในนี้)  เช่น -1001234567890"/>
-      <div class="flex items-center gap-2">
-        <button class="btn btn-ghost" style="padding:5px 12px;font-size:.75rem" onclick="validateCloneBot()">
-          <span id="clone-bot-spinner" class="spinner hidden"></span>
-          ทดสอบบอท
-        </button>
-        <span id="clone-bot-status" class="text-xs" style="color:var(--muted)"></span>
+      <!-- Copy mode fields -->
+      <div id="clone-copy-fields">
+        <input id="clone-copy-target" type="text" placeholder="Target Chat ID หรือ @username  เช่น -1001234567890"/>
+      </div>
+      <!-- Bot mode fields -->
+      <div id="clone-bot-fields" class="hidden space-y-3">
+        <input id="clone-bot-token" type="password" placeholder="Bot Token (จาก @BotFather)"/>
+        <input id="clone-target-chat" type="text" placeholder="Chat ID กลุ่มปลายทาง (บอทต้องอยู่ในนี้)  เช่น -1001234567890"/>
+        <div class="flex items-center gap-2">
+          <button class="btn btn-ghost" style="padding:5px 12px;font-size:.75rem" onclick="validateCloneBot()">
+            <span id="clone-bot-spinner" class="spinner hidden"></span>
+            ทดสอบบอท
+          </button>
+          <span id="clone-bot-status" class="text-xs" style="color:var(--muted)"></span>
+        </div>
       </div>
       <div class="flex gap-2 flex-wrap">
-        <button class="btn btn-purple" onclick="startClone()">🔁 Clone ทั้งหมด</button>
+        <button class="btn btn-purple" id="btn-clone-start" onclick="startClone()">👤 Clone ทั้งหมด</button>
         <button class="btn btn-ghost" onclick="stopDownload()">Stop</button>
       </div>
     </div>
@@ -456,11 +480,14 @@ let currentMode = 'save';
 /* ─── Mode toggle ─── */
 function setMode(mode) {
   currentMode = mode;
-  const isFwd = mode === 'forward';
-  document.getElementById('bot-config').classList.toggle('hidden', !isFwd);
-  document.getElementById('btn-mode-save').className = 'btn flex-1 ' + (isFwd ? 'btn-ghost' : 'btn-accent');
-  document.getElementById('btn-mode-fwd').className  = 'btn flex-1 ' + (isFwd ? 'btn-accent' : 'btn-ghost');
-  document.getElementById('btn-dl-range').textContent = isFwd ? '🤖 Forward Range' : 'Download Range';
+  document.getElementById('bot-config').classList.toggle('hidden', mode !== 'forward');
+  document.getElementById('copy-config').classList.toggle('hidden', mode !== 'copy');
+  document.getElementById('btn-mode-save').className = 'btn flex-1 ' + (mode === 'save'    ? 'btn-accent' : 'btn-ghost');
+  document.getElementById('btn-mode-copy').className = 'btn flex-1 ' + (mode === 'copy'    ? 'btn-green'  : 'btn-ghost');
+  document.getElementById('btn-mode-fwd').className  = 'btn flex-1 ' + (mode === 'forward' ? 'btn-accent' : 'btn-ghost');
+  document.getElementById('btn-dl-range').textContent =
+    mode === 'forward' ? '🤖 Forward Range' :
+    mode === 'copy'    ? '👤 Copy Range' : 'Download Range';
 }
 
 async function validateBot() {
@@ -541,6 +568,19 @@ async function verifyCode() {
 }
 
 /* ─── Clone Topic ─── */
+let cloneMode = 'copy';
+function setCloneMode(mode) {
+  cloneMode = mode;
+  const isCopy = mode === 'copy';
+  document.getElementById('clone-copy-info').classList.toggle('hidden', !isCopy);
+  document.getElementById('clone-bot-info').classList.toggle('hidden', isCopy);
+  document.getElementById('clone-copy-fields').classList.toggle('hidden', !isCopy);
+  document.getElementById('clone-bot-fields').classList.toggle('hidden', isCopy);
+  document.getElementById('btn-clone-copy').className = 'btn flex-1 ' + (isCopy ? 'btn-green' : 'btn-ghost');
+  document.getElementById('btn-clone-bot').className  = 'btn flex-1 ' + (isCopy ? 'btn-ghost' : 'btn-accent');
+  document.getElementById('btn-clone-start').textContent = isCopy ? '👤 Clone ทั้งหมด' : '🤖 Clone ทั้งหมด';
+}
+
 async function validateCloneBot() {
   const token = document.getElementById('clone-bot-token').value.trim();
   const chat  = document.getElementById('clone-target-chat').value.trim();
@@ -564,12 +604,22 @@ async function validateCloneBot() {
 }
 
 async function startClone() {
-  const link  = document.getElementById('clone-link').value.trim();
-  const token = document.getElementById('clone-bot-token').value.trim();
-  const chat  = document.getElementById('clone-target-chat').value.trim();
-  if (!link)  { alert('กรอก link ข้อความแรกของ Topic ก่อนครับ'); return; }
-  if (!token || !chat) { alert('กรอก Bot Token และ Target Chat ID ก่อนครับ'); return; }
-  const d = await post('/api/clone/start', { link, bot_token: token, target_chat_id: chat });
+  const link = document.getElementById('clone-link').value.trim();
+  if (!link) { alert('กรอก link ข้อความแรกของ Topic ก่อนครับ'); return; }
+  let url, body;
+  if (cloneMode === 'copy') {
+    const toChat = document.getElementById('clone-copy-target').value.trim();
+    if (!toChat) { alert('กรอก Target Chat ID ก่อนครับ'); return; }
+    url = '/api/clone/copy';
+    body = { link, to_chat_id: toChat };
+  } else {
+    const token = document.getElementById('clone-bot-token').value.trim();
+    const chat  = document.getElementById('clone-target-chat').value.trim();
+    if (!token || !chat) { alert('กรอก Bot Token และ Target Chat ID ก่อนครับ'); return; }
+    url = '/api/clone/start';
+    body = { link, bot_token: token, target_chat_id: chat };
+  }
+  const d = await post(url, body);
   if (d.ok) {
     document.getElementById('prog-card').classList.remove('hidden');
     document.getElementById('prog-card').scrollIntoView({ behavior: 'smooth' });
@@ -646,16 +696,23 @@ async function downloadScanned() {
   const ids = [...document.querySelectorAll('.thumb-card.selected')]
     .map(el => parseInt(el.dataset.id));
   if (!ids.length) { alert('Select at least one item.'); return; }
-  const body = { link: scannedLink, msg_ids: ids };
-  if (currentMode === 'forward') {
-    body.forward_mode = true;
-    body.bot_token = document.getElementById('bot-token').value.trim();
-    body.target_chat_id = document.getElementById('target-chat').value.trim();
-    if (!body.bot_token || !body.target_chat_id) {
-      alert('กรอก Bot Token และ Target Chat ID ในส่วน ⚙️ ตั้งค่าบอท ก่อนครับ'); return;
-    }
+  let url, body;
+  if (currentMode === 'copy') {
+    const toChat = document.getElementById('copy-target-chat').value.trim();
+    if (!toChat) { alert('กรอก Target Chat ID ในส่วน 👤 Copy via Account ก่อนครับ'); return; }
+    url = '/api/download/copy_ids';
+    body = { link: scannedLink, msg_ids: ids, to_chat_id: toChat };
+  } else if (currentMode === 'forward') {
+    const token = document.getElementById('bot-token').value.trim();
+    const chat  = document.getElementById('target-chat').value.trim();
+    if (!token || !chat) { alert('กรอก Bot Token และ Target Chat ID ในส่วน ⚙️ ตั้งค่าบอท ก่อนครับ'); return; }
+    url = '/api/download/start_ids';
+    body = { link: scannedLink, msg_ids: ids, forward_mode: true, bot_token: token, target_chat_id: chat };
+  } else {
+    url = '/api/download/start_ids';
+    body = { link: scannedLink, msg_ids: ids };
   }
-  const d = await post('/api/download/start_ids', body);
+  const d = await post(url, body);
   if (d.ok) {
     document.getElementById('prog-card').classList.remove('hidden');
     startPolling();
@@ -668,16 +725,23 @@ async function startBatch() {
   const count = parseInt(document.getElementById('dl-count').value) || 10;
   const offset = parseInt(document.getElementById('dl-offset').value) || 0;
   if (!link) { alert('Enter a Telegram link.'); return; }
-  const body = { link, count, start_offset: offset };
-  if (currentMode === 'forward') {
-    body.forward_mode = true;
-    body.bot_token = document.getElementById('bot-token').value.trim();
-    body.target_chat_id = document.getElementById('target-chat').value.trim();
-    if (!body.bot_token || !body.target_chat_id) {
-      alert('กรอก Bot Token และ Target Chat ID ในส่วน ⚙️ ตั้งค่าบอท ก่อนครับ'); return;
-    }
+  let url, body;
+  if (currentMode === 'copy') {
+    const toChat = document.getElementById('copy-target-chat').value.trim();
+    if (!toChat) { alert('กรอก Target Chat ID ในส่วน 👤 Copy via Account ก่อนครับ'); return; }
+    url = '/api/download/copy';
+    body = { link, count, start_offset: offset, to_chat_id: toChat };
+  } else if (currentMode === 'forward') {
+    const token = document.getElementById('bot-token').value.trim();
+    const chat  = document.getElementById('target-chat').value.trim();
+    if (!token || !chat) { alert('กรอก Bot Token และ Target Chat ID ในส่วน ⚙️ ตั้งค่าบอท ก่อนครับ'); return; }
+    url = '/api/download/start';
+    body = { link, count, start_offset: offset, forward_mode: true, bot_token: token, target_chat_id: chat };
+  } else {
+    url = '/api/download/start';
+    body = { link, count, start_offset: offset };
   }
-  const d = await post('/api/download/start', body);
+  const d = await post(url, body);
   if (d.ok) {
     document.getElementById('prog-card').classList.remove('hidden');
     startPolling();
@@ -1048,6 +1112,94 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
         return jsonify({"ok": True, "deleted": deleted})
 
     # ── Clone Topic ───────────────────────────────────────────────────────────
+
+    @app.route("/api/download/copy", methods=["POST"])
+    @login_required
+    def download_copy():
+        """Copy range of messages via user account (server-side, no file size limit)."""
+        if download_state["running"]:
+            return jsonify({"ok": False, "error": "Already running."})
+        if not tg_client.is_authorized:
+            return jsonify({"ok": False, "error": "Not authenticated."})
+        data = request.get_json(force=True)
+        link = data.get("link", "").strip()
+        to_chat = data.get("to_chat_id", "").strip()
+        try:
+            count = max(1, min(int(data.get("count", 10)), 500))
+            offset = int(data.get("start_offset", 0))
+        except (ValueError, TypeError):
+            return jsonify({"ok": False, "error": "Invalid count or offset."})
+        if not link:
+            return jsonify({"ok": False, "error": "Link required."})
+        if not to_chat:
+            return jsonify({"ok": False, "error": "Target chat ID required."})
+        try:
+            parse_link(link)
+        except ValueError as e:
+            return jsonify({"ok": False, "error": str(e)})
+        dl = BatchDownloader(tg_client, download_state)
+        asyncio.run_coroutine_threadsafe(
+            dl.copy_to_chat(link, count, offset, to_chat_id=to_chat), loop
+        )
+        return jsonify({"ok": True})
+
+    @app.route("/api/download/copy_ids", methods=["POST"])
+    @login_required
+    def download_copy_ids():
+        """Copy specific message IDs via user account."""
+        if download_state["running"]:
+            return jsonify({"ok": False, "error": "Already running."})
+        if not tg_client.is_authorized:
+            return jsonify({"ok": False, "error": "Not authenticated."})
+        data = request.get_json(force=True)
+        link = data.get("link", "").strip()
+        to_chat = data.get("to_chat_id", "").strip()
+        try:
+            msg_ids = [int(x) for x in data.get("msg_ids", [])]
+        except (ValueError, TypeError):
+            return jsonify({"ok": False, "error": "Invalid msg_ids."})
+        if not link or not msg_ids:
+            return jsonify({"ok": False, "error": "Link and msg_ids required."})
+        if not to_chat:
+            return jsonify({"ok": False, "error": "Target chat ID required."})
+        try:
+            parse_link(link)
+        except ValueError as e:
+            return jsonify({"ok": False, "error": str(e)})
+        dl = BatchDownloader(tg_client, download_state)
+        asyncio.run_coroutine_threadsafe(
+            dl.copy_specific_to_chat(link, msg_ids, to_chat_id=to_chat), loop
+        )
+        return jsonify({"ok": True})
+
+    @app.route("/api/clone/copy", methods=["POST"])
+    @login_required
+    def clone_copy():
+        """Clone entire topic via user account copy_message."""
+        if download_state["running"]:
+            return jsonify({"ok": False, "error": "มีงานค้างอยู่ รอให้เสร็จก่อนครับ"})
+        if not tg_client.is_authorized:
+            return jsonify({"ok": False, "error": "Not authenticated."})
+        data = request.get_json(force=True)
+        link = data.get("link", "").strip()
+        to_chat = data.get("to_chat_id", "").strip()
+        try:
+            max_gap = int(data.get("max_gap", 30))
+        except (ValueError, TypeError):
+            max_gap = 30
+        if not link:
+            return jsonify({"ok": False, "error": "Link required."})
+        if not to_chat:
+            return jsonify({"ok": False, "error": "Target chat ID required."})
+        try:
+            parse_link(link)
+        except ValueError as e:
+            return jsonify({"ok": False, "error": str(e)})
+        dl = BatchDownloader(tg_client, download_state)
+        asyncio.run_coroutine_threadsafe(
+            dl.clone_topic_user(link, to_chat_id=to_chat, max_gap=max_gap), loop
+        )
+        return jsonify({"ok": True})
 
     @app.route("/api/clone/start", methods=["POST"])
     @login_required

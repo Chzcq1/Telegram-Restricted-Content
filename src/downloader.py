@@ -224,6 +224,168 @@ class BatchDownloader:
 
         return results
 
+    # ── Copy via user account (server-side, no file size limit) ──────────────
+
+    async def copy_to_chat(self, link: str, count: int, start_offset: int = 0,
+                           to_chat_id: str = ""):
+        """Copy messages directly between chats using the user account.
+        No download/upload — Telegram handles it server-side.
+        Supports any file size. to_chat_id must be a chat the user account can post in.
+        """
+        target = to_chat_id.strip()
+        # Convert numeric string to int
+        if target.lstrip("-").isdigit():
+            target = int(target)
+
+        self.state.update({
+            "running": True, "total": count, "current": 0,
+            "downloaded": 0, "skipped": 0,
+            "current_file": "", "current_progress": 0,
+            "log": [], "new_files": [],
+            "forward_mode": True,
+        })
+        try:
+            chat_id, base_id = parse_link(link)
+            start_id = base_id + start_offset
+            self._log(f"User-copy started — from {chat_id}, IDs {start_id}→{start_id+count-1}, to {target}")
+            await self._copy_ids(chat_id, list(range(start_id, start_id + count)), target)
+        except Exception as e:
+            self._log(f"Fatal error: {e}")
+        finally:
+            self._finish()
+
+    async def copy_specific_to_chat(self, link: str, msg_ids: List[int],
+                                    to_chat_id: str = ""):
+        """Copy specific message IDs via user account."""
+        target = to_chat_id.strip()
+        if target.lstrip("-").isdigit():
+            target = int(target)
+
+        self.state.update({
+            "running": True, "total": len(msg_ids), "current": 0,
+            "downloaded": 0, "skipped": 0,
+            "current_file": "", "current_progress": 0,
+            "log": [], "new_files": [],
+            "forward_mode": True,
+        })
+        try:
+            chat_id, _ = parse_link(link)
+            self._log(f"User-copy {len(msg_ids)} messages from {chat_id} → {target}")
+            await self._copy_ids(chat_id, msg_ids, target)
+        except Exception as e:
+            self._log(f"Fatal error: {e}")
+        finally:
+            self._finish()
+
+    async def _copy_ids(self, from_chat, msg_ids: List[int], to_chat):
+        """Server-side copy loop using client.copy_message()."""
+        for i, msg_id in enumerate(msg_ids):
+            if not self.state["running"]:
+                self._log("Cancelled.")
+                break
+            self.state["current"] = i + 1
+            self.state["current_file"] = f"msg {msg_id}"
+            try:
+                msg = await self.tg.client.get_messages(from_chat, msg_id)
+                if not msg or (not msg.media and not (msg.text and msg.text.strip())):
+                    self._log(f"[{msg_id}] No content — skipped")
+                    self.state["skipped"] += 1
+                    continue
+                await self.tg.client.copy_message(
+                    chat_id=to_chat,
+                    from_chat_id=from_chat,
+                    message_id=msg_id,
+                )
+                label = str(msg.media).split(".")[-1] if msg.media else "text"
+                self._log(f"[{msg_id}] ✓ copied ({label})")
+                self.state["downloaded"] += 1
+            except Exception as e:
+                self._log(f"[{msg_id}] error: {e}")
+                self.state["skipped"] += 1
+
+        self._log(
+            f"Done — {self.state['downloaded']} copied, "
+            f"{self.state['skipped']} skipped."
+        )
+
+    async def clone_topic_user(self, link: str, to_chat_id: str, max_gap: int = 30):
+        """Clone entire topic using user account copy_message — no bot, no file size limit."""
+        target = to_chat_id.strip()
+        if target.lstrip("-").isdigit():
+            target = int(target)
+
+        self.state.update({
+            "running": True, "total": 0, "current": 0,
+            "downloaded": 0, "skipped": 0,
+            "current_file": "", "current_progress": 0,
+            "log": [], "new_files": [],
+            "forward_mode": True,
+        })
+        try:
+            chat_id, base_id = parse_link(link)
+            self._log(f"User-clone started — from {chat_id} msg {base_id} → {target}")
+            self._log(f"Scanning forward (หยุดเมื่อไม่เจอข้อความ {max_gap} อันติดกัน)…")
+
+            msg_id = base_id
+            consecutive_empty = 0
+
+            while self.state["running"]:
+                batch_ids = list(range(msg_id, msg_id + 50))
+                try:
+                    messages = await self.tg.client.get_messages(chat_id, batch_ids)
+                except Exception as e:
+                    self._log(f"Fetch error at {msg_id}: {e}")
+                    break
+
+                if not isinstance(messages, list):
+                    messages = [messages]
+
+                for msg in messages:
+                    if not self.state["running"]:
+                        self._log("Cancelled.")
+                        return
+
+                    has_content = bool(msg and (msg.media or (msg.text and msg.text.strip())))
+
+                    if not has_content:
+                        consecutive_empty += 1
+                        if consecutive_empty >= max_gap:
+                            self._log(f"ไม่พบข้อความ {max_gap} อันติดกัน — สิ้นสุด Topic")
+                            self.state["running"] = False
+                            break
+                        continue
+
+                    consecutive_empty = 0
+                    self.state["total"] = max(self.state["total"], msg.id - base_id + 1)
+                    self.state["current"] = msg.id - base_id + 1
+                    self.state["current_file"] = f"msg {msg.id}"
+
+                    try:
+                        await self.tg.client.copy_message(
+                            chat_id=target,
+                            from_chat_id=chat_id,
+                            message_id=msg.id,
+                        )
+                        label = str(msg.media).split(".")[-1] if msg.media else "text"
+                        self._log(f"[{msg.id}] ✓ copied ({label})")
+                        self.state["downloaded"] += 1
+                    except Exception as e:
+                        self._log(f"[{msg.id}] error: {e}")
+                        self.state["skipped"] += 1
+
+                if not self.state["running"]:
+                    break
+                msg_id += 50
+
+            self._log(
+                f"Clone done — {self.state['downloaded']} copied, "
+                f"{self.state['skipped']} skipped."
+            )
+        except Exception as e:
+            self._log(f"Fatal error: {e}")
+        finally:
+            self._finish()
+
     # ── Batch download: sequential range ──────────────────────────────────────
 
     async def run(self, link: str, count: int, start_offset: int = 0,
