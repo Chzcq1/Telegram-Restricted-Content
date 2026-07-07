@@ -290,81 +290,82 @@ class BatchDownloader:
         finally:
             self._finish()
 
-    # Telegram's inline player only streams H.264/AAC MP4 reliably
-    _STREAMABLE_EXTS = {".mp4", ".m4v"}
-
     async def _user_send(self, msg, path: Path, to_chat, thread_id=None,
                          max_retries: int = 5) -> bool:
         """Download-then-send one message via the user account, then delete the file.
 
-        Video routing:
-          .mp4 / .m4v  → send_video (supports_streaming=True, plays inline)
-          MKV/TS/AVI/… → send_document (always downloadable, never broken bubble)
-        Retries automatically on FloodWait. Returns True on success.
+        Video: tries send_video first (inline playback).  If Telegram rejects it
+        (bad codec/container), automatically retries as send_document so the file
+        is still delivered and downloadable.  FloodWait is retried up to max_retries.
         """
         from pyrogram.errors import FloodWait
         caption = getattr(msg, "caption", "") or ""
-        kwargs = {"caption": caption}
+        kw = {"caption": caption}
         if thread_id:
-            kwargs["message_thread_id"] = thread_id
+            kw["message_thread_id"] = thread_id
 
-        ext = path.suffix.lower()
-        is_video_msg = bool(
+        is_video = bool(
             msg.video or (
                 msg.document and msg.document.mime_type
                 and msg.document.mime_type.startswith("video")
             )
         )
 
+        # Build video kwargs with original metadata so duration/size show correctly
+        vid_kw = dict(kw)
+        vid_kw["supports_streaming"] = True
+        src = msg.video or None
+        if src:
+            for attr in ("duration", "width", "height"):
+                val = getattr(src, attr, None)
+                if val:
+                    vid_kw[attr] = val
+
+        used_doc_fallback = False
+
         for attempt in range(max_retries):
             try:
-                if is_video_msg and ext in self._STREAMABLE_EXTS:
-                    # MP4 → inline playback; carry over original metadata
-                    vid_kw = dict(kwargs)
-                    vid_kw["supports_streaming"] = True
-                    src = msg.video or None
-                    if src:
-                        if getattr(src, "duration", None):
-                            vid_kw["duration"] = src.duration
-                        if getattr(src, "width", None):
-                            vid_kw["width"] = src.width
-                        if getattr(src, "height", None):
-                            vid_kw["height"] = src.height
+                if is_video and not used_doc_fallback:
                     await self.tg.client.send_video(to_chat, video=str(path), **vid_kw)
-                elif is_video_msg:
-                    # Non-MP4 (MKV/TS/AVI/…) — send as document so it's always
-                    # downloadable and never shows as a broken 0:00 bubble
-                    self._log(
-                        f"[{msg.id}] {ext} ไม่ใช่ MP4 → ส่งเป็น document"
-                    )
-                    await self.tg.client.send_document(
-                        to_chat, document=str(path), **kwargs
-                    )
                 elif msg.photo:
-                    await self.tg.client.send_photo(to_chat, photo=str(path), **kwargs)
+                    await self.tg.client.send_photo(to_chat, photo=str(path), **kw)
                 elif msg.audio:
-                    await self.tg.client.send_audio(to_chat, audio=str(path), **kwargs)
+                    await self.tg.client.send_audio(to_chat, audio=str(path), **kw)
                 elif msg.voice:
-                    await self.tg.client.send_voice(to_chat, voice=str(path), **kwargs)
+                    await self.tg.client.send_voice(to_chat, voice=str(path), **kw)
                 elif msg.animation:
-                    await self.tg.client.send_animation(
-                        to_chat, animation=str(path), **kwargs
-                    )
+                    await self.tg.client.send_animation(to_chat, animation=str(path), **kw)
                 else:
-                    await self.tg.client.send_document(
-                        to_chat, document=str(path), **kwargs
-                    )
+                    await self.tg.client.send_document(to_chat, document=str(path), **kw)
                 path.unlink(missing_ok=True)
                 return True
             except FloodWait as e:
                 wait = e.value + 1
-                self._log(f"[{msg.id}] FloodWait {wait}s — รอสักครู่…")
-                self.state["current_file"] = f"msg {msg.id} — FloodWait {wait}s"
+                self.state["current_file"] = f"⏳ รอ FloodWait {wait}s…"
                 await asyncio.sleep(wait)
             except Exception as e:
-                self._log(f"[{msg.id}] send error: {e}")
-                return False
-        self._log(f"[{msg.id}] หมด retry — skipped")
+                err = str(e)
+                if is_video and not used_doc_fallback:
+                    # send_video failed — retry as document (different codec/container)
+                    self._log(f"[{msg.id}] video rejected ({err}) → ลอง document")
+                    used_doc_fallback = True
+                    try:
+                        await self.tg.client.send_document(
+                            to_chat, document=str(path), **kw
+                        )
+                        path.unlink(missing_ok=True)
+                        return True
+                    except FloodWait as fe:
+                        wait = fe.value + 1
+                        self.state["current_file"] = f"⏳ รอ FloodWait {wait}s…"
+                        await asyncio.sleep(wait)
+                    except Exception as e2:
+                        self._log(f"[{msg.id}] ✗ ส่งไม่ได้ ({e2})")
+                        return False
+                else:
+                    self._log(f"[{msg.id}] ✗ ส่งไม่ได้ ({err})")
+                    return False
+        self._log(f"[{msg.id}] ✗ หมด retry")
         return False
 
     async def _user_send_text(self, msg, to_chat, thread_id=None,
@@ -391,71 +392,71 @@ class BatchDownloader:
         """Download → send via user account → delete, one at a time."""
         for i, msg_id in enumerate(msg_ids):
             if not self.state["running"]:
-                self._log("Cancelled.")
+                self._log("หยุดแล้ว")
                 break
             self.state["current"] = i + 1
-            self.state["current_file"] = f"msg {msg_id}"
+            self.state["current_progress"] = 0
+            self.state["current_file"] = f"#{i+1}/{len(msg_ids)} — กำลังดึงข้อมูล…"
             try:
                 msg = await self.tg.client.get_messages(from_chat, msg_id)
                 if not msg or (not msg.media and not (msg.text and msg.text.strip())):
-                    self._log(f"[{msg_id}] No content — skipped")
                     self.state["skipped"] += 1
                     continue
 
                 if msg.media:
-                    def make_progress(mid):
+                    def make_progress(num, total):
                         def _cb(cur, tot):
                             if tot:
                                 pct = int(cur * 100 / tot)
                                 self.state["current_progress"] = pct
-                                self.state["current_file"] = f"msg {mid} ดาวน์โหลด {pct}%"
+                                self.state["current_file"] = (
+                                    f"#{num}/{total} — โหลด {pct}%"
+                                )
                         return _cb
 
+                    self.state["current_file"] = f"#{i+1}/{len(msg_ids)} — กำลังโหลด…"
                     path = await self.tg.client.download_media(
                         msg,
                         file_name=str(DOWNLOADS_DIR) + "/",
-                        progress=make_progress(msg_id),
+                        progress=make_progress(i + 1, len(msg_ids)),
                     )
                     if not path:
-                        self._log(f"[{msg_id}] ดาวน์โหลดไม่ได้ — skipped")
                         self.state["skipped"] += 1
                         continue
 
                     p = Path(path)
                     if not p.exists() or p.stat().st_size == 0:
                         p.unlink(missing_ok=True)
-                        self._log(f"[{msg_id}] ไฟล์ว่างเปล่า (0 B) — skipped")
                         self.state["skipped"] += 1
                         continue
 
-                    self.state["current_file"] = f"msg {msg_id} กำลังส่ง…"
-                    label = str(msg.media).split(".")[-1]
+                    self.state["current_progress"] = 100
+                    self.state["current_file"] = f"#{i+1}/{len(msg_ids)} — กำลังส่ง…"
                     ok = await self._user_send(msg, p, to_chat, thread_id)
                     if ok:
-                        self._log(f"[{msg_id}] ✓ ส่งสำเร็จ ({label})")
+                        label = str(msg.media).split(".")[-1]
+                        self._log(f"✅ #{i+1} ส่งสำเร็จ ({label})")
                         self.state["downloaded"] += 1
                     else:
-                        # Keep file on server if send failed
                         self.state["new_files"].append(p.name)
                         self.state["skipped"] += 1
 
                 elif msg.text and msg.text.strip():
-                    self.state["current_file"] = f"msg {msg_id} text — กำลังส่ง…"
+                    self.state["current_file"] = f"#{i+1}/{len(msg_ids)} — ส่ง text…"
                     ok = await self._user_send_text(msg, to_chat, thread_id)
                     if ok:
-                        self._log(f"[{msg_id}] ✓ ส่ง text สำเร็จ")
+                        self._log(f"✅ #{i+1} text สำเร็จ")
                         self.state["downloaded"] += 1
                     else:
                         self.state["skipped"] += 1
 
             except Exception as e:
-                self._log(f"[{msg_id}] error: {e}")
+                self._log(f"⚠️ #{i+1} error: {e}")
                 self.state["skipped"] += 1
 
-        self._log(
-            f"Done — {self.state['downloaded']} ส่งสำเร็จ, "
-            f"{self.state['skipped']} skipped."
-        )
+        ok_n = self.state["downloaded"]
+        sk_n = self.state["skipped"]
+        self._log(f"🏁 เสร็จแล้ว — ส่งสำเร็จ {ok_n} | ข้าม {sk_n}")
 
     async def clone_topic_user(self, link: str, to_chat_id: str, max_gap: int = 30):
         """Clone entire topic — download each file, send via user account, delete."""
@@ -509,12 +510,17 @@ class BatchDownloader:
                     self.state["current_file"] = f"msg {msg.id}"
 
                     if msg.media:
+                        self.state["current_progress"] = 0
+                        self.state["current_file"] = f"msg {msg.id} — กำลังโหลด…"
+
                         def make_progress(mid):
                             def _cb(cur, tot):
                                 if tot:
                                     pct = int(cur * 100 / tot)
                                     self.state["current_progress"] = pct
-                                    self.state["current_file"] = f"msg {mid} ดาวน์โหลด {pct}%"
+                                    self.state["current_file"] = (
+                                        f"msg {mid} — โหลด {pct}%"
+                                    )
                             return _cb
 
                         try:
@@ -524,33 +530,32 @@ class BatchDownloader:
                                 progress=make_progress(msg.id),
                             )
                             if not path:
-                                self._log(f"[{msg.id}] ดาวน์โหลดไม่ได้ — skipped")
                                 self.state["skipped"] += 1
                             else:
                                 p = Path(path)
                                 if not p.exists() or p.stat().st_size == 0:
                                     p.unlink(missing_ok=True)
-                                    self._log(f"[{msg.id}] ไฟล์ว่างเปล่า (0 B) — skipped")
                                     self.state["skipped"] += 1
                                 else:
-                                    self.state["current_file"] = f"msg {msg.id} กำลังส่ง…"
+                                    self.state["current_progress"] = 100
+                                    self.state["current_file"] = f"msg {msg.id} — กำลังส่ง…"
                                     label = str(msg.media).split(".")[-1]
                                     ok = await self._user_send(msg, p, target, thread_id)
                                     if ok:
-                                        self._log(f"[{msg.id}] ✓ ส่งสำเร็จ ({label})")
+                                        self._log(f"✅ [{msg.id}] ส่งสำเร็จ ({label})")
                                         self.state["downloaded"] += 1
                                     else:
                                         self.state["new_files"].append(p.name)
                                         self.state["skipped"] += 1
                         except Exception as e:
-                            self._log(f"[{msg.id}] error: {e}")
+                            self._log(f"⚠️ [{msg.id}] error: {e}")
                             self.state["skipped"] += 1
 
                     elif msg.text and msg.text.strip():
-                        self.state["current_file"] = f"msg {msg.id} text — กำลังส่ง…"
+                        self.state["current_file"] = f"msg {msg.id} — ส่ง text…"
                         ok = await self._user_send_text(msg, target, thread_id)
                         if ok:
-                            self._log(f"[{msg.id}] ✓ ส่ง text สำเร็จ")
+                            self._log(f"✅ [{msg.id}] text สำเร็จ")
                             self.state["downloaded"] += 1
                         else:
                             self.state["skipped"] += 1
