@@ -915,6 +915,13 @@ setInterval(checkAuth, 30000);
 def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
     app = Flask(__name__)
     app.secret_key = os.environ.get("SESSION_SECRET", os.urandom(24))
+    # Replit's preview pane loads the app inside an iframe on a different
+    # origin than the top-level page, so the session cookie must be marked
+    # SameSite=None; Secure or browsers will silently drop it after login.
+    app.config.update(
+        SESSION_COOKIE_SAMESITE="None",
+        SESSION_COOKIE_SECURE=True,
+    )
 
     def login_required(f):
         @wraps(f)
