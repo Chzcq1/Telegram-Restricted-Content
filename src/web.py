@@ -288,7 +288,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
   <!-- API credentials missing banner -->
   <div id="no-creds-banner" class="hidden" style="background:#7c2d12;border:1px solid #dc2626;border-radius:10px;padding:14px 16px;font-size:.85rem;line-height:1.5">
     ⚠️ <strong>API_ID และ API_HASH ยังไม่ได้ตั้งค่า</strong><br>
-    ไปที่ <strong>Render Dashboard → Your Service → Environment</strong> แล้วเพิ่มตัวแปร:<br>
+    ไปที่ <strong>Replit → Tools → Secrets</strong> แล้วเพิ่มตัวแปร:<br>
     <code style="background:#450a0a;padding:2px 6px;border-radius:4px">API_ID</code> และ
     <code style="background:#450a0a;padding:2px 6px;border-radius:4px">API_HASH</code><br>
     <span style="color:#fca5a5">รับค่าได้จาก <a href="https://my.telegram.org/auth" target="_blank" style="color:#f87171;text-decoration:underline">my.telegram.org/auth</a></span>

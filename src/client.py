@@ -34,7 +34,7 @@ class UserClient:
 
     async def send_code(self, phone: str) -> dict:
         if self.credentials_missing:
-            return {"ok": False, "error": "API_ID และ API_HASH ยังไม่ได้ตั้งค่าบน Render Dashboard"}
+            return {"ok": False, "error": "API_ID และ API_HASH ยังไม่ได้ตั้งค่า (ตั้งค่าได้ที่ Replit Secrets)"}
         try:
             sent = await self.client.send_code(phone)
             self._phone_code_hash = sent.phone_code_hash
@@ -44,7 +44,7 @@ class UserClient:
 
     async def sign_in(self, phone: str, code: str, password: str = "") -> dict:
         if self.credentials_missing:
-            return {"ok": False, "error": "API_ID และ API_HASH ยังไม่ได้ตั้งค่าบน Render Dashboard"}
+            return {"ok": False, "error": "API_ID และ API_HASH ยังไม่ได้ตั้งค่า (ตั้งค่าได้ที่ Replit Secrets)"}
         try:
             await self.client.sign_in(phone, self._phone_code_hash, code)
             self.is_authorized = True

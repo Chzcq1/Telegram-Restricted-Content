@@ -27,19 +27,9 @@ Required secrets (set in Replit Secrets):
 - `WEB_PASSWORD` — Password to protect the web interface
 - `PHONE_NUMBER` — (optional) pre-fills the login form
 
-## Deploying to Render
+## Deploying Elsewhere (optional)
 
-1. Push this repo to GitHub.
-2. Go to https://dashboard.render.com → New → Web Service.
-3. Connect your GitHub repo.
-4. Render auto-detects `render.yaml` — settings are pre-configured.
-5. Add environment variables in the Render dashboard:
-   - `API_ID`
-   - `API_HASH`
-   - `PHONE_NUMBER` (optional)
-6. Click **Deploy**.
-
-The app listens on the `PORT` env var (set automatically by Render). Health check runs at `/healthz`.
+This repo was originally set up for Render and still includes `render.yaml` for that path (not needed on Replit): push to GitHub, create a Render Web Service, connect the repo (Render auto-detects `render.yaml`), and set `API_ID` / `API_HASH` / `PHONE_NUMBER` as env vars there. The app listens on `PORT` and exposes a health check at `/healthz`.
 
 ## User Preferences
 
