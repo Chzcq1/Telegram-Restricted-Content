@@ -1044,8 +1044,9 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
         return asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=timeout)
 
     @app.route("/")
-    @login_required
     def index():
+        if not _is_authenticated():
+            return redirect(url_for("login"))
         return render_template_string(INDEX_HTML, phone=PHONE_NUMBER)
 
     # ── Auth ──────────────────────────────────────────────────────────────────
