@@ -63,6 +63,16 @@ class UserClient:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
+    async def sign_out(self) -> dict:
+        if self.credentials_missing or not self.client:
+            return {"ok": False, "error": "Not connected"}
+        try:
+            await self.client.sign_out()
+        except Exception:
+            pass
+        self.is_authorized = False
+        return {"ok": True}
+
     async def get_me(self) -> dict:
         if self.credentials_missing or not self.client:
             return {}

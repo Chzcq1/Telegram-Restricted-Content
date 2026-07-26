@@ -318,6 +318,16 @@ INDEX_HTML = r"""<!DOCTYPE html>
   .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
   .dot-green { background: var(--green); box-shadow: 0 0 6px var(--green); }
   .dot-amber { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+
+  /* Logout dropdown */
+  #user-badge:hover { background: #1f2d45; color: var(--text); }
+  .logout-item {
+    width: 100%; text-align: left; padding: 8px 12px; font-size: .8rem;
+    color: var(--text); background: none; border: none; border-radius: 7px;
+    cursor: pointer; display: flex; align-items: center; gap: 8px;
+    transition: background .12s;
+  }
+  .logout-item:hover { background: #1f2d45; }
 </style>
 </head>
 <body>
@@ -329,9 +339,23 @@ INDEX_HTML = r"""<!DOCTYPE html>
       <div style="width:28px;height:28px;background:linear-gradient(135deg,var(--purple),var(--accent));border-radius:7px"></div>
       <span style="font-size:.875rem;font-weight:700;letter-spacing:.04em;color:var(--text)">TG DOWNLOADER</span>
     </div>
-    <div id="user-badge" class="flex items-center gap-2 text-xs" style="color:var(--muted)">
-      <span class="dot dot-amber" id="status-dot"></span>
-      <span id="status-label">Connecting…</span>
+    <div class="relative flex items-center">
+      <div id="user-badge" class="flex items-center gap-2 text-xs cursor-pointer select-none px-2 py-1 rounded-lg" style="color:var(--muted)" onclick="toggleLogoutMenu(event)">
+        <span class="dot dot-amber" id="status-dot"></span>
+        <span id="status-label">Connecting…</span>
+        <span style="font-size:.55rem;opacity:.45;margin-left:2px">▼</span>
+      </div>
+      <div id="logout-menu" class="hidden" style="position:absolute;top:calc(100% + 10px);right:0;background:#111827;border:1px solid #1f2d45;border-radius:10px;padding:5px;min-width:190px;z-index:200;box-shadow:0 8px 28px #00000070">
+        <button onclick="doWebLogout()" class="logout-item">
+          <span>🔒</span> ออกจากเว็บ
+        </button>
+        <div id="tg-logout-wrap" class="hidden">
+          <div style="height:1px;background:#1f2d45;margin:4px 0"></div>
+          <button onclick="doTgLogout()" class="logout-item" style="color:#f87171">
+            <span>🔄</span> เปลี่ยนบัญชี Telegram
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </header>
@@ -576,6 +600,27 @@ async function validateBot() {
 function getToken() { return localStorage.getItem('tgdl_token') || ''; }
 function authHeaders(extra) { return Object.assign({ 'X-Auth-Token': getToken() }, extra || {}); }
 
+/* ─── Logout menu ─── */
+function toggleLogoutMenu(e) {
+  e.stopPropagation();
+  document.getElementById('logout-menu').classList.toggle('hidden');
+}
+document.addEventListener('click', () => {
+  document.getElementById('logout-menu')?.classList.add('hidden');
+});
+
+function doWebLogout() {
+  localStorage.removeItem('tgdl_token');
+  location.href = '/login';
+}
+
+async function doTgLogout() {
+  document.getElementById('logout-menu').classList.add('hidden');
+  if (!confirm('ออกจาก Telegram และล้าง session เพื่อเปลี่ยนบัญชีใช่ไหม?')) return;
+  await post('/api/auth/tg-logout', {});
+  checkAuth();
+}
+
 // Redirect to login if no token or token rejected
 (async function checkWebAuth() {
   const tok = getToken();
@@ -605,6 +650,7 @@ async function checkAuth() {
       document.getElementById('auth-card').classList.add('hidden');
       document.getElementById('dl-card').classList.remove('hidden');
       document.getElementById('clone-card').classList.remove('hidden');
+      document.getElementById('tg-logout-wrap').classList.remove('hidden');
       loadFiles();
     } else {
       dot.className = 'dot dot-amber';
@@ -613,6 +659,7 @@ async function checkAuth() {
       document.getElementById('auth-card').classList.remove('hidden');
       document.getElementById('dl-card').classList.add('hidden');
       document.getElementById('clone-card').classList.add('hidden');
+      document.getElementById('tg-logout-wrap').classList.add('hidden');
     }
   } catch (e) {}
 }
@@ -1078,6 +1125,16 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
             return jsonify(run_async(tg_client.send_code(phone), timeout=20))
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)})
+
+    @app.route("/api/auth/tg-logout", methods=["POST"])
+    @login_required
+    def tg_logout():
+        try:
+            result = run_async(tg_client.sign_out(), timeout=15)
+        except Exception as e:
+            tg_client.is_authorized = False
+            result = {"ok": False, "error": str(e)}
+        return jsonify(result)
 
     @app.route("/api/auth/sign_in", methods=["POST"])
     @login_required
