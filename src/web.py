@@ -3,7 +3,17 @@ import asyncio
 import base64
 from functools import wraps
 from pathlib import Path
-from flask import Flask, request, jsonify, send_from_directory, render_template_string, session, redirect, url_for, Response
+from flask import (
+    Flask,
+    request,
+    jsonify,
+    send_from_directory,
+    render_template_string,
+    session,
+    redirect,
+    url_for,
+    Response,
+)
 from src.downloader import BatchDownloader, BotForwarder, parse_link, _fmt_size
 
 DOWNLOADS_DIR = Path("downloads")
@@ -964,6 +974,7 @@ setInterval(checkAuth, 30000);
 
 # ── Flask app ──────────────────────────────────────────────────────────────────
 
+
 def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
     app = Flask(__name__)
     app.secret_key = os.environ.get("SESSION_SECRET", os.urandom(24))
@@ -973,11 +984,11 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
     # so we issue a random token on login, store it in localStorage, and the
     # client sends it via the X-Auth-Token header on every API request.
     import secrets as _secrets
+
     _auth_tokens: set[str] = set()
 
     def _get_request_token() -> str:
-        return (request.headers.get("X-Auth-Token", "")
-                or request.args.get("token", ""))
+        return request.headers.get("X-Auth-Token", "") or request.args.get("token", "")
 
     def _is_authenticated() -> bool:
         if not WEB_PASSWORD:
@@ -990,6 +1001,7 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
             if not _is_authenticated():
                 return jsonify({"ok": False, "error": "Unauthorized"}), 401
             return f(*args, **kwargs)
+
         return decorated
 
     @app.route("/login", methods=["GET", "POST"])
@@ -1016,10 +1028,16 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
         return jsonify({"ok": False, "error": "Incorrect password"}), 401
 
     download_state = {
-        "running": False, "total": 0, "current": 0,
-        "downloaded": 0, "skipped": 0,
-        "current_file": "", "current_progress": 0,
-        "log": [], "new_files": [], "last_link": "",
+        "running": False,
+        "total": 0,
+        "current": 0,
+        "downloaded": 0,
+        "skipped": 0,
+        "current_file": "",
+        "current_progress": 0,
+        "log": [],
+        "new_files": [],
+        "last_link": "",
     }
 
     def run_async(coro, timeout=30):
@@ -1042,7 +1060,9 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
                 user = run_async(tg_client.get_me(), timeout=10)
             except Exception:
                 user = {}
-            return jsonify({"authorized": True, "user": user, "credentials_missing": False})
+            return jsonify(
+                {"authorized": True, "user": user, "credentials_missing": False}
+            )
         return jsonify({"authorized": False, "credentials_missing": False})
 
     @app.route("/api/auth/send_code", methods=["POST"])
@@ -1067,7 +1087,8 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
                     data.get("phone", "").strip(),
                     data.get("code", "").strip(),
                     data.get("password", "").strip(),
-                ), timeout=30
+                ),
+                timeout=30,
             )
             return jsonify(result)
         except Exception as e:
@@ -1098,7 +1119,7 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
     def bot_validate():
         data = request.get_json(force=True)
         token = data.get("bot_token", "").strip()
-        chat  = data.get("target_chat_id", "").strip()
+        chat = data.get("target_chat_id", "").strip()
         if not token or not chat:
             return jsonify({"ok": False, "error": "กรอกข้อมูลให้ครบ"})
         fwd = BotForwarder(token, chat)
@@ -1127,12 +1148,19 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
         forwarder = None
         if data.get("forward_mode"):
             token = data.get("bot_token", "").strip()
-            chat  = data.get("target_chat_id", "").strip()
+            chat = data.get("target_chat_id", "").strip()
             if not token or not chat:
-                return jsonify({"ok": False, "error": "Bot Token และ Target Chat ID จำเป็นสำหรับ Forward Mode"})
+                return jsonify(
+                    {
+                        "ok": False,
+                        "error": "Bot Token และ Target Chat ID จำเป็นสำหรับ Forward Mode",
+                    }
+                )
             forwarder = BotForwarder(token, chat)
         dl = BatchDownloader(tg_client, download_state)
-        asyncio.run_coroutine_threadsafe(dl.run(link, count, offset, forwarder=forwarder), loop)
+        asyncio.run_coroutine_threadsafe(
+            dl.run(link, count, offset, forwarder=forwarder), loop
+        )
         return jsonify({"ok": True})
 
     @app.route("/api/download/start_ids", methods=["POST"])
@@ -1154,12 +1182,19 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
         forwarder = None
         if data.get("forward_mode"):
             token = data.get("bot_token", "").strip()
-            chat  = data.get("target_chat_id", "").strip()
+            chat = data.get("target_chat_id", "").strip()
             if not token or not chat:
-                return jsonify({"ok": False, "error": "Bot Token และ Target Chat ID จำเป็นสำหรับ Forward Mode"})
+                return jsonify(
+                    {
+                        "ok": False,
+                        "error": "Bot Token และ Target Chat ID จำเป็นสำหรับ Forward Mode",
+                    }
+                )
             forwarder = BotForwarder(token, chat)
         dl = BatchDownloader(tg_client, download_state)
-        asyncio.run_coroutine_threadsafe(dl.run_specific(link, msg_ids, forwarder=forwarder), loop)
+        asyncio.run_coroutine_threadsafe(
+            dl.run_specific(link, msg_ids, forwarder=forwarder), loop
+        )
         return jsonify({"ok": True})
 
     @app.route("/api/download/stop", methods=["POST"])
@@ -1180,7 +1215,9 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
     def list_files():
         files = []
         if DOWNLOADS_DIR.exists():
-            for f in sorted(DOWNLOADS_DIR.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
+            for f in sorted(
+                DOWNLOADS_DIR.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True
+            ):
                 if f.is_file():
                     files.append({"name": f.name, "size": _fmt_size(f.stat().st_size)})
         return jsonify({"files": files})
@@ -1188,7 +1225,9 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
     @app.route("/files/<path:filename>")
     @login_required
     def serve_file(filename):
-        return send_from_directory(str(DOWNLOADS_DIR.absolute()), filename, as_attachment=True)
+        return send_from_directory(
+            str(DOWNLOADS_DIR.absolute()), filename, as_attachment=True
+        )
 
     @app.route("/api/files/delete", methods=["POST"])
     @login_required
@@ -1198,7 +1237,8 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
         for name in names:
             p = DOWNLOADS_DIR / Path(name).name
             if p.is_file():
-                p.unlink(); deleted += 1
+                p.unlink()
+                deleted += 1
         return jsonify({"ok": True, "deleted": deleted})
 
     @app.route("/api/files/delete_all", methods=["POST"])
@@ -1207,7 +1247,8 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
         deleted = 0
         for f in DOWNLOADS_DIR.iterdir():
             if f.is_file():
-                f.unlink(); deleted += 1
+                f.unlink()
+                deleted += 1
         return jsonify({"ok": True, "deleted": deleted})
 
     # ── Clone Topic ───────────────────────────────────────────────────────────
@@ -1308,9 +1349,9 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
         if not tg_client.is_authorized:
             return jsonify({"ok": False, "error": "Not authenticated."})
         data = request.get_json(force=True)
-        link  = data.get("link", "").strip()
+        link = data.get("link", "").strip()
         token = data.get("bot_token", "").strip()
-        chat  = data.get("target_chat_id", "").strip()
+        chat = data.get("target_chat_id", "").strip()
         max_gap = int(data.get("max_gap", 30))
         if not link:
             return jsonify({"ok": False, "error": "Link required."})
