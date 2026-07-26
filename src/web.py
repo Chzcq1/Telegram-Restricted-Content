@@ -86,7 +86,10 @@ async function doLogin() {
 const tok = localStorage.getItem('tgdl_token');
 if (tok) {
   fetch('/api/auth/status', { headers: { 'X-Auth-Token': tok } })
-    .then(r => { if (r.ok) location.href = '/'; })
+    .then(r => {
+      if (r.ok) { location.href = '/'; }
+      else if (r.status === 401) { localStorage.removeItem('tgdl_token'); }
+    })
     .catch(() => {});
 }
 </script>
@@ -1045,8 +1048,6 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
 
     @app.route("/")
     def index():
-        if not _is_authenticated():
-            return redirect(url_for("login"))
         return render_template_string(INDEX_HTML, phone=PHONE_NUMBER)
 
     # ── Auth ──────────────────────────────────────────────────────────────────
