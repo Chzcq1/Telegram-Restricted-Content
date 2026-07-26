@@ -1,8 +1,9 @@
 import os
 import asyncio
+import base64
 from functools import wraps
 from pathlib import Path
-from flask import Flask, request, jsonify, send_from_directory, render_template_string, session, redirect, url_for
+from flask import Flask, request, jsonify, send_from_directory, render_template_string, session, redirect, url_for, Response
 from src.downloader import BatchDownloader, BotForwarder, parse_link, _fmt_size
 
 DOWNLOADS_DIR = Path("downloads")
@@ -24,6 +25,7 @@ LOGIN_HTML = """<!DOCTYPE html>
   input:focus { border-color: #00d4ff; box-shadow: 0 0 0 2px #00d4ff15; }
   .btn { border-radius: 8px; padding: 9px 18px; font-size: 0.875rem; font-weight: 600; cursor: pointer; border: none; width: 100%; background: #00d4ff; color: #000; margin-top: 12px; transition: background .15s; }
   .btn:hover { background: #00bce0; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
   .err { color: #ef4444; font-size: 0.8rem; margin-top: 8px; }
 </style>
 </head>
@@ -34,12 +36,50 @@ LOGIN_HTML = """<!DOCTYPE html>
     <span style="font-size:.875rem;font-weight:700;letter-spacing:.04em">TG DOWNLOADER</span>
   </div>
   <p style="font-size:.75rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:12px">Enter Password</p>
-  <form method="POST">
-    <input type="password" name="password" autofocus placeholder="Password" required/>
-    {% if error %}<p class="err">{{ error }}</p>{% endif %}
-    <button class="btn" type="submit">Unlock</button>
-  </form>
+  <div>
+    <input type="password" id="pw" autofocus placeholder="Password"/>
+    <p id="err" class="err" style="display:none"></p>
+    <button class="btn" id="btn" onclick="doLogin()">Unlock</button>
+  </div>
 </div>
+<script>
+document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+async function doLogin() {
+  const pw = document.getElementById('pw').value;
+  const btn = document.getElementById('btn');
+  const err = document.getElementById('err');
+  if (!pw) return;
+  btn.disabled = true; btn.textContent = '…';
+  err.style.display = 'none';
+  try {
+    const r = await fetch('/api/auth/web-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      localStorage.setItem('tgdl_token', d.token);
+      location.href = '/';
+    } else {
+      err.textContent = 'Incorrect password.';
+      err.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Unlock';
+    }
+  } catch(e) {
+    err.textContent = 'Network error — try again.';
+    err.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Unlock';
+  }
+}
+// If already authed, skip login page
+const tok = localStorage.getItem('tgdl_token');
+if (tok) {
+  fetch('/api/auth/status', { headers: { 'X-Auth-Token': tok } })
+    .then(r => { if (r.ok) location.href = '/'; })
+    .catch(() => {});
+}
+</script>
 </body>
 </html>
 """
@@ -519,10 +559,22 @@ async function validateBot() {
   }
 }
 
+/* ─── Token helper ─── */
+function getToken() { return localStorage.getItem('tgdl_token') || ''; }
+function authHeaders(extra) { return Object.assign({ 'X-Auth-Token': getToken() }, extra || {}); }
+
+// Redirect to login if no token or token rejected
+(async function checkWebAuth() {
+  const tok = getToken();
+  if (!tok) { location.href = '/login'; return; }
+  const r = await fetch('/api/auth/status', { headers: authHeaders() });
+  if (r.status === 401) { localStorage.removeItem('tgdl_token'); location.href = '/login'; }
+})();
+
 /* ─── Auth ─── */
 async function checkAuth() {
   try {
-    const d = await (await fetch('/api/auth/status')).json();
+    const d = await (await fetch('/api/auth/status', { headers: authHeaders() })).json();
     const dot = document.getElementById('status-dot');
     const lbl = document.getElementById('status-label');
     const banner = document.getElementById('no-creds-banner');
@@ -764,7 +816,7 @@ function startPolling() {
 }
 
 async function pollStatus() {
-  const d = await (await fetch('/api/download/status')).json();
+  const d = await (await fetch('/api/download/status', { headers: authHeaders() })).json();
   const pct = d.total ? Math.round(d.current / d.total * 100) : 0;
   const fill = document.getElementById('prog-fill');
   fill.style.width = pct + '%';
@@ -810,7 +862,7 @@ function copyLastLink() {
 
 /* ─── File manager ─── */
 async function loadFiles() {
-  const d = await (await fetch('/api/files')).json();
+  const d = await (await fetch('/api/files', { headers: authHeaders() })).json();
   const list = document.getElementById('file-list');
   const toolbar = document.getElementById('file-toolbar');
   const cntEl = document.getElementById('file-count');
@@ -890,7 +942,7 @@ async function cleanUpAll() {
 
 /* ─── Helpers ─── */
 async function post(url, body) {
-  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const r = await fetch(url, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) });
   return r.json();
 }
 function setMsg(id, text, color) {
@@ -916,62 +968,52 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
     app = Flask(__name__)
     app.secret_key = os.environ.get("SESSION_SECRET", os.urandom(24))
 
-    # Server-side session store: token -> True
-    # Flask's signed cookie sessions don't survive Replit's proxied iframe
-    # reliably across all browsers, so we use a plain cookie holding a
-    # random token that we validate against this in-process dict instead.
+    # Token-based auth stored in browser localStorage.
+    # Cookies don't work in Replit's proxied iframe (blocked as third-party),
+    # so we issue a random token on login, store it in localStorage, and the
+    # client sends it via the X-Auth-Token header on every API request.
     import secrets as _secrets
-    _auth_tokens: dict[str, bool] = {}
-    _AUTH_COOKIE = "tgdl_auth"
+    _auth_tokens: set[str] = set()
+
+    def _get_request_token() -> str:
+        return (request.headers.get("X-Auth-Token", "")
+                or request.args.get("token", ""))
 
     def _is_authenticated() -> bool:
         if not WEB_PASSWORD:
             return True
-        token = request.cookies.get(_AUTH_COOKIE, "")
-        return bool(token and _auth_tokens.get(token))
-
-    def _make_auth_response(resp):
-        """Attach a long-lived auth cookie (SameSite=None; Secure) to resp."""
-        token = _secrets.token_hex(32)
-        _auth_tokens[token] = True
-        resp.set_cookie(
-            _AUTH_COOKIE, token,
-            max_age=86400 * 30,   # 30 days
-            httponly=True,
-            secure=True,
-            samesite="None",
-        )
-        return resp
+        return _get_request_token() in _auth_tokens
 
     def login_required(f):
         @wraps(f)
         def decorated(*args, **kwargs):
             if not _is_authenticated():
-                if request.is_json:
-                    return jsonify({"ok": False, "error": "Unauthorized"}), 401
-                return redirect(url_for("login"))
+                return jsonify({"ok": False, "error": "Unauthorized"}), 401
             return f(*args, **kwargs)
         return decorated
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
-        if not WEB_PASSWORD:
-            return redirect(url_for("index"))
-        error = None
-        if request.method == "POST":
-            if request.form.get("password") == WEB_PASSWORD:
-                resp = redirect(url_for("index"))
-                return _make_auth_response(resp)
-            error = "Incorrect password."
-        return render_template_string(LOGIN_HTML, error=error)
+        return render_template_string(LOGIN_HTML)
 
     @app.route("/logout")
     def logout():
-        token = request.cookies.get(_AUTH_COOKIE, "")
-        _auth_tokens.pop(token, None)
-        resp = redirect(url_for("login"))
-        resp.delete_cookie(_AUTH_COOKIE)
-        return resp
+        token = _get_request_token()
+        _auth_tokens.discard(token)
+        return redirect(url_for("login"))
+
+    @app.route("/api/auth/web-login", methods=["POST"])
+    def web_login():
+        if not WEB_PASSWORD:
+            token = _secrets.token_hex(32)
+            _auth_tokens.add(token)
+            return jsonify({"ok": True, "token": token})
+        data = request.get_json(silent=True) or {}
+        if data.get("password") == WEB_PASSWORD:
+            token = _secrets.token_hex(32)
+            _auth_tokens.add(token)
+            return jsonify({"ok": True, "token": token})
+        return jsonify({"ok": False, "error": "Incorrect password"}), 401
 
     download_state = {
         "running": False, "total": 0, "current": 0,
