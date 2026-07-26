@@ -915,18 +915,38 @@ setInterval(checkAuth, 30000);
 def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
     app = Flask(__name__)
     app.secret_key = os.environ.get("SESSION_SECRET", os.urandom(24))
-    # Replit's preview pane loads the app inside an iframe on a different
-    # origin than the top-level page, so the session cookie must be marked
-    # SameSite=None; Secure or browsers will silently drop it after login.
-    app.config.update(
-        SESSION_COOKIE_SAMESITE="None",
-        SESSION_COOKIE_SECURE=True,
-    )
+
+    # Server-side session store: token -> True
+    # Flask's signed cookie sessions don't survive Replit's proxied iframe
+    # reliably across all browsers, so we use a plain cookie holding a
+    # random token that we validate against this in-process dict instead.
+    import secrets as _secrets
+    _auth_tokens: dict[str, bool] = {}
+    _AUTH_COOKIE = "tgdl_auth"
+
+    def _is_authenticated() -> bool:
+        if not WEB_PASSWORD:
+            return True
+        token = request.cookies.get(_AUTH_COOKIE, "")
+        return bool(token and _auth_tokens.get(token))
+
+    def _make_auth_response(resp):
+        """Attach a long-lived auth cookie (SameSite=None; Secure) to resp."""
+        token = _secrets.token_hex(32)
+        _auth_tokens[token] = True
+        resp.set_cookie(
+            _AUTH_COOKIE, token,
+            max_age=86400 * 30,   # 30 days
+            httponly=True,
+            secure=True,
+            samesite="None",
+        )
+        return resp
 
     def login_required(f):
         @wraps(f)
         def decorated(*args, **kwargs):
-            if WEB_PASSWORD and not session.get("authenticated"):
+            if not _is_authenticated():
                 if request.is_json:
                     return jsonify({"ok": False, "error": "Unauthorized"}), 401
                 return redirect(url_for("login"))
@@ -936,20 +956,22 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
     @app.route("/login", methods=["GET", "POST"])
     def login():
         if not WEB_PASSWORD:
-            session["authenticated"] = True
             return redirect(url_for("index"))
         error = None
         if request.method == "POST":
             if request.form.get("password") == WEB_PASSWORD:
-                session["authenticated"] = True
-                return redirect(url_for("index"))
+                resp = redirect(url_for("index"))
+                return _make_auth_response(resp)
             error = "Incorrect password."
         return render_template_string(LOGIN_HTML, error=error)
 
     @app.route("/logout")
     def logout():
-        session.clear()
-        return redirect(url_for("login"))
+        token = request.cookies.get(_AUTH_COOKIE, "")
+        _auth_tokens.pop(token, None)
+        resp = redirect(url_for("login"))
+        resp.delete_cookie(_AUTH_COOKIE)
+        return resp
 
     download_state = {
         "running": False, "total": 0, "current": 0,
