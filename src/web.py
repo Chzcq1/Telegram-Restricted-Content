@@ -470,13 +470,19 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
     <!-- Clone mode toggle -->
     <div class="flex gap-1 p-1 mb-3" style="background:var(--surface);border-radius:8px;border:1px solid var(--border)">
-      <button id="btn-clone-copy" class="btn flex-1 btn-green" onclick="setCloneMode('copy')" style="font-size:.75rem">👤 Copy via Account ✨แนะนำ</button>
-      <button id="btn-clone-bot"  class="btn flex-1 btn-ghost"  onclick="setCloneMode('bot')"  style="font-size:.75rem">🤖 ส่งผ่านบอท</button>
+      <button id="btn-clone-copy"   class="btn flex-1 btn-green"  onclick="setCloneMode('copy')"   style="font-size:.75rem">👤 Copy via Account</button>
+      <button id="btn-clone-stream" class="btn flex-1 btn-ghost"  onclick="setCloneMode('stream')" style="font-size:.75rem">⚡ Stream (noforwards)</button>
+      <button id="btn-clone-bot"    class="btn flex-1 btn-ghost"  onclick="setCloneMode('bot')"    style="font-size:.75rem">🤖 ส่งผ่านบอท</button>
     </div>
 
     <!-- Copy mode info -->
     <div id="clone-copy-info" class="mb-3" style="background:var(--surface);border:1px solid #10b98150;border-radius:8px;padding:10px 12px;font-size:.78rem;line-height:1.7">
       <p style="color:#86efac">✅ บัญชีของคุณ copy ข้อความโดยตรง — ไม่ดาวน์โหลด ไม่จำกัดขนาดไฟล์ รองรับคลิปทุกความยาว<br>✅ บัญชีของคุณต้องเป็นสมาชิกทั้งกลุ่มต้นทางและปลายทาง</p>
+    </div>
+
+    <!-- Stream mode info -->
+    <div id="clone-stream-info" class="hidden mb-3" style="background:var(--surface);border:1px solid #f59e0b50;border-radius:8px;padding:10px 12px;font-size:.78rem;line-height:1.7">
+      <p style="color:#fcd34d">⚡ ดาวน์โหลดเข้า RAM แล้วอัพโหลดซ้ำทันที — ข้าม CHAT_FORWARDS_RESTRICTED ได้<br>✅ ไม่จำกัดขนาดไฟล์ (ถึง 2GB) | ✅ ไม่เขียนดิสก์ | ✅ รองรับ Album<br>⚠️ ช้ากว่า Copy เล็กน้อยเพราะต้องดาวน์โหลด+อัพโหลดจริง</p>
     </div>
 
     <!-- Bot mode info -->
@@ -496,6 +502,10 @@ INDEX_HTML = r"""<!DOCTYPE html>
       <!-- Copy mode fields -->
       <div id="clone-copy-fields">
         <input id="clone-copy-target" type="text" placeholder="Target Chat ID หรือ @username  เช่น -1001234567890"/>
+      </div>
+      <!-- Stream mode fields -->
+      <div id="clone-stream-fields" class="hidden">
+        <input id="clone-stream-target" type="text" placeholder="Target Chat ID หรือ @username  เช่น -1001234567890"/>
       </div>
       <!-- Bot mode fields -->
       <div id="clone-bot-fields" class="hidden space-y-3">
@@ -701,14 +711,18 @@ async function verifyCode() {
 let cloneMode = 'copy';
 function setCloneMode(mode) {
   cloneMode = mode;
-  const isCopy = mode === 'copy';
-  document.getElementById('clone-copy-info').classList.toggle('hidden', !isCopy);
-  document.getElementById('clone-bot-info').classList.toggle('hidden', isCopy);
-  document.getElementById('clone-copy-fields').classList.toggle('hidden', !isCopy);
-  document.getElementById('clone-bot-fields').classList.toggle('hidden', isCopy);
-  document.getElementById('btn-clone-copy').className = 'btn flex-1 ' + (isCopy ? 'btn-green' : 'btn-ghost');
-  document.getElementById('btn-clone-bot').className  = 'btn flex-1 ' + (isCopy ? 'btn-ghost' : 'btn-accent');
-  document.getElementById('btn-clone-start').textContent = isCopy ? '👤 Clone ทั้งหมด' : '🤖 Clone ทั้งหมด';
+  document.getElementById('clone-copy-info').classList.toggle('hidden',   mode !== 'copy');
+  document.getElementById('clone-stream-info').classList.toggle('hidden', mode !== 'stream');
+  document.getElementById('clone-bot-info').classList.toggle('hidden',    mode !== 'bot');
+  document.getElementById('clone-copy-fields').classList.toggle('hidden',   mode !== 'copy');
+  document.getElementById('clone-stream-fields').classList.toggle('hidden', mode !== 'stream');
+  document.getElementById('clone-bot-fields').classList.toggle('hidden',    mode !== 'bot');
+  document.getElementById('btn-clone-copy').className   = 'btn flex-1 ' + (mode === 'copy'   ? 'btn-green'  : 'btn-ghost');
+  document.getElementById('btn-clone-stream').className = 'btn flex-1 ' + (mode === 'stream' ? 'btn-amber'  : 'btn-ghost');
+  document.getElementById('btn-clone-bot').className    = 'btn flex-1 ' + (mode === 'bot'    ? 'btn-accent' : 'btn-ghost');
+  document.getElementById('btn-clone-start').textContent =
+    mode === 'stream' ? '⚡ Clone ทั้งหมด' :
+    mode === 'bot'    ? '🤖 Clone ทั้งหมด' : '👤 Clone ทั้งหมด';
 }
 
 async function validateCloneBot() {
@@ -741,6 +755,11 @@ async function startClone() {
     const toChat = document.getElementById('clone-copy-target').value.trim();
     if (!toChat) { alert('กรอก Target Chat ID ก่อนครับ'); return; }
     url = '/api/clone/copy';
+    body = { link, to_chat_id: toChat };
+  } else if (cloneMode === 'stream') {
+    const toChat = document.getElementById('clone-stream-target').value.trim();
+    if (!toChat) { alert('กรอก Target Chat ID ก่อนครับ'); return; }
+    url = '/api/clone/stream';
     body = { link, to_chat_id: toChat };
   } else {
     const token = document.getElementById('clone-bot-token').value.trim();
@@ -1477,6 +1496,35 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
         dl = BatchDownloader(tg_client, download_state)
         asyncio.run_coroutine_threadsafe(
             dl.clone_topic_user(link, to_chat_id=to_chat, max_gap=max_gap), loop
+        )
+        return jsonify({"ok": True})
+
+    @app.route("/api/clone/stream", methods=["POST"])
+    @login_required
+    def clone_stream():
+        """Clone entire topic via stream (download to RAM → re-upload, bypasses noforwards)."""
+        if download_state["running"]:
+            return jsonify({"ok": False, "error": "มีงานค้างอยู่ รอให้เสร็จก่อนครับ"})
+        if not tg_client.is_authorized:
+            return jsonify({"ok": False, "error": "Not authenticated."})
+        data = request.get_json(force=True)
+        link = data.get("link", "").strip()
+        to_chat = data.get("to_chat_id", "").strip()
+        try:
+            max_gap = int(data.get("max_gap", 30))
+        except (ValueError, TypeError):
+            max_gap = 30
+        if not link:
+            return jsonify({"ok": False, "error": "Link required."})
+        if not to_chat:
+            return jsonify({"ok": False, "error": "Target chat ID required."})
+        try:
+            parse_link(link)
+        except ValueError as e:
+            return jsonify({"ok": False, "error": str(e)})
+        dl = BatchDownloader(tg_client, download_state)
+        asyncio.run_coroutine_threadsafe(
+            dl.clone_topic_stream(link, to_chat_id=to_chat, max_gap=max_gap), loop
         )
         return jsonify({"ok": True})
 
