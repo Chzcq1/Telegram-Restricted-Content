@@ -396,6 +396,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
     <div class="flex gap-1 p-1 mb-3" style="background:var(--surface);border-radius:8px;border:1px solid var(--border)">
       <button id="btn-mode-save" class="btn flex-1 btn-accent" onclick="setMode('save')" style="font-size:.75rem">💾 บันทึกลงเซิร์ฟเวอร์</button>
       <button id="btn-mode-copy" class="btn flex-1 btn-ghost"  onclick="setMode('copy')" style="font-size:.75rem">👤 Copy via Account</button>
+      <button id="btn-mode-stream" class="btn flex-1 btn-ghost" onclick="setMode('stream')" style="font-size:.75rem">⚡ Stream (noforwards)</button>
       <button id="btn-mode-fwd"  class="btn flex-1 btn-ghost"  onclick="setMode('forward')" style="font-size:.75rem">🤖 ส่งผ่านบอท</button>
     </div>
 
@@ -404,6 +405,13 @@ INDEX_HTML = r"""<!DOCTYPE html>
       <p class="text-xs font-bold" style="color:var(--green);letter-spacing:.06em">👤 Copy via Account — ไม่จำกัดขนาดไฟล์ ไม่ต้องดาวน์โหลด</p>
       <p class="text-xs" style="color:var(--muted);line-height:1.6">บัญชีของคุณ copy ข้อความโดยตรง — รองรับคลิปทุกความยาว (ถึง 2GB) และทำงานเกือบทันที บัญชีของคุณต้องเป็นสมาชิกในกลุ่มปลายทาง</p>
       <input id="copy-target-chat" type="text" placeholder="Target Chat ID หรือ @username  เช่น -1001234567890"/>
+    </div>
+
+    <!-- Stream config (bypasses noforwards) -->
+    <div id="stream-config" class="hidden mb-3 p-3 space-y-2" style="background:var(--surface);border-radius:8px;border:1px solid #f59e0b50">
+      <p class="text-xs font-bold" style="color:var(--amber);letter-spacing:.06em">⚡ Stream via Account — ใช้สำหรับกลุ่มที่บล็อค Copy ด้วย (noforwards)</p>
+      <p class="text-xs" style="color:var(--muted);line-height:1.6">ดาวน์โหลดไฟล์เข้า RAM แล้วอัพโหลดซ้ำทันที — สร้าง file_id ใหม่จึงข้ามข้อจำกัด CHAT_FORWARDS_RESTRICTED ได้ ไม่จำกัดขนาดไฟล์ (ถึง 2GB) บัญชีของคุณต้องเป็นสมาชิกในกลุ่มปลายทาง</p>
+      <input id="stream-target-chat" type="text" placeholder="Target Chat ID หรือ @username  เช่น -1001234567890"/>
     </div>
 
     <!-- Bot config (forward mode only) -->
@@ -566,12 +574,15 @@ function setMode(mode) {
   currentMode = mode;
   document.getElementById('bot-config').classList.toggle('hidden', mode !== 'forward');
   document.getElementById('copy-config').classList.toggle('hidden', mode !== 'copy');
-  document.getElementById('btn-mode-save').className = 'btn flex-1 ' + (mode === 'save'    ? 'btn-accent' : 'btn-ghost');
-  document.getElementById('btn-mode-copy').className = 'btn flex-1 ' + (mode === 'copy'    ? 'btn-green'  : 'btn-ghost');
-  document.getElementById('btn-mode-fwd').className  = 'btn flex-1 ' + (mode === 'forward' ? 'btn-accent' : 'btn-ghost');
+  document.getElementById('stream-config').classList.toggle('hidden', mode !== 'stream');
+  document.getElementById('btn-mode-save').className   = 'btn flex-1 ' + (mode === 'save'    ? 'btn-accent' : 'btn-ghost');
+  document.getElementById('btn-mode-copy').className   = 'btn flex-1 ' + (mode === 'copy'    ? 'btn-green'  : 'btn-ghost');
+  document.getElementById('btn-mode-stream').className = 'btn flex-1 ' + (mode === 'stream'  ? 'btn-amber'  : 'btn-ghost');
+  document.getElementById('btn-mode-fwd').className    = 'btn flex-1 ' + (mode === 'forward' ? 'btn-accent' : 'btn-ghost');
   document.getElementById('btn-dl-range').textContent =
     mode === 'forward' ? '🤖 Forward Range' :
-    mode === 'copy'    ? '👤 Copy Range' : 'Download Range';
+    mode === 'copy'    ? '👤 Copy Range'    :
+    mode === 'stream'  ? '⚡ Stream Range'  : 'Download Range';
 }
 
 async function validateBot() {
@@ -821,6 +832,11 @@ async function downloadScanned() {
     if (!toChat) { alert('กรอก Target Chat ID ในส่วน 👤 Copy via Account ก่อนครับ'); return; }
     url = '/api/download/copy_ids';
     body = { link: scannedLink, msg_ids: ids, to_chat_id: toChat };
+  } else if (currentMode === 'stream') {
+    const toChat = document.getElementById('stream-target-chat').value.trim();
+    if (!toChat) { alert('กรอก Target Chat ID ในส่วน ⚡ Stream ก่อนครับ'); return; }
+    url = '/api/download/stream_ids';
+    body = { link: scannedLink, msg_ids: ids, to_chat_id: toChat };
   } else if (currentMode === 'forward') {
     const token = document.getElementById('bot-token').value.trim();
     const chat  = document.getElementById('target-chat').value.trim();
@@ -849,6 +865,11 @@ async function startBatch() {
     const toChat = document.getElementById('copy-target-chat').value.trim();
     if (!toChat) { alert('กรอก Target Chat ID ในส่วน 👤 Copy via Account ก่อนครับ'); return; }
     url = '/api/download/copy';
+    body = { link, count, start_offset: offset, to_chat_id: toChat };
+  } else if (currentMode === 'stream') {
+    const toChat = document.getElementById('stream-target-chat').value.trim();
+    if (!toChat) { alert('กรอก Target Chat ID ในส่วน ⚡ Stream ก่อนครับ'); return; }
+    url = '/api/download/stream';
     body = { link, count, start_offset: offset, to_chat_id: toChat };
   } else if (currentMode === 'forward') {
     const token = document.getElementById('bot-token').value.trim();
@@ -1368,6 +1389,65 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
         dl = BatchDownloader(tg_client, download_state)
         asyncio.run_coroutine_threadsafe(
             dl.copy_specific_to_chat(link, msg_ids, to_chat_id=to_chat), loop
+        )
+        return jsonify({"ok": True})
+
+    @app.route("/api/download/stream", methods=["POST"])
+    @login_required
+    def download_stream():
+        """Stream range via user account (download to RAM → re-upload, bypasses noforwards)."""
+        if download_state["running"]:
+            return jsonify({"ok": False, "error": "Already running."})
+        if not tg_client.is_authorized:
+            return jsonify({"ok": False, "error": "Not authenticated."})
+        data = request.get_json(force=True)
+        link = data.get("link", "").strip()
+        to_chat = data.get("to_chat_id", "").strip()
+        try:
+            count = max(1, min(int(data.get("count", 10)), 500))
+            offset = int(data.get("start_offset", 0))
+        except (ValueError, TypeError):
+            return jsonify({"ok": False, "error": "Invalid count or offset."})
+        if not link:
+            return jsonify({"ok": False, "error": "Link required."})
+        if not to_chat:
+            return jsonify({"ok": False, "error": "Target chat ID required."})
+        try:
+            parse_link(link)
+        except ValueError as e:
+            return jsonify({"ok": False, "error": str(e)})
+        dl = BatchDownloader(tg_client, download_state)
+        asyncio.run_coroutine_threadsafe(
+            dl.stream_to_chat(link, count, offset, to_chat_id=to_chat), loop
+        )
+        return jsonify({"ok": True})
+
+    @app.route("/api/download/stream_ids", methods=["POST"])
+    @login_required
+    def download_stream_ids():
+        """Stream specific message IDs via user account (bypasses noforwards)."""
+        if download_state["running"]:
+            return jsonify({"ok": False, "error": "Already running."})
+        if not tg_client.is_authorized:
+            return jsonify({"ok": False, "error": "Not authenticated."})
+        data = request.get_json(force=True)
+        link = data.get("link", "").strip()
+        to_chat = data.get("to_chat_id", "").strip()
+        try:
+            msg_ids = [int(x) for x in data.get("msg_ids", [])]
+        except (ValueError, TypeError):
+            return jsonify({"ok": False, "error": "Invalid msg_ids."})
+        if not link or not msg_ids:
+            return jsonify({"ok": False, "error": "Link and msg_ids required."})
+        if not to_chat:
+            return jsonify({"ok": False, "error": "Target chat ID required."})
+        try:
+            parse_link(link)
+        except ValueError as e:
+            return jsonify({"ok": False, "error": str(e)})
+        dl = BatchDownloader(tg_client, download_state)
+        asyncio.run_coroutine_threadsafe(
+            dl.stream_specific_to_chat(link, msg_ids, to_chat_id=to_chat), loop
         )
         return jsonify({"ok": True})
 

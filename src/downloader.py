@@ -464,6 +464,233 @@ class BatchDownloader:
         finally:
             self._finish()
 
+    # ── Stream via account (download-to-RAM → re-upload, bypasses noforwards) ──
+
+    async def stream_to_chat(self, link: str, count: int, start_offset: int = 0,
+                             to_chat_id: str = ""):
+        """Download each file to memory, immediately re-upload via the user account.
+        Bypasses CHAT_FORWARDS_RESTRICTED because it creates a brand-new file_id.
+        No disk I/O — faster than save-to-server."""
+        import io
+        target, thread_id = parse_target_chat(to_chat_id)
+        self.state.update({
+            "running": True, "total": count, "current": 0,
+            "downloaded": 0, "skipped": 0,
+            "current_file": "", "current_progress": 0,
+            "log": [], "new_files": [], "last_link": "",
+            "forward_mode": True,
+        })
+        try:
+            chat_id, base_id = parse_link(link)
+            start_id = base_id + start_offset
+            self._log(f"Stream via account — {chat_id} [{start_id}→{start_id+count-1}] → {target}")
+            await self._resolve_peer(target)
+            await self._stream_ids(chat_id, list(range(start_id, start_id + count)), target, thread_id)
+        except Exception as e:
+            self._log(f"Fatal error: {e}")
+        finally:
+            self._finish()
+
+    async def stream_specific_to_chat(self, link: str, msg_ids: List[int], to_chat_id: str = ""):
+        """Stream specific message IDs via account (re-upload, bypasses noforwards)."""
+        import io
+        target, thread_id = parse_target_chat(to_chat_id)
+        self.state.update({
+            "running": True, "total": len(msg_ids), "current": 0,
+            "downloaded": 0, "skipped": 0,
+            "current_file": "", "current_progress": 0,
+            "log": [], "new_files": [], "last_link": "",
+            "forward_mode": True,
+        })
+        try:
+            chat_id, _ = parse_link(link)
+            self._log(f"Stream via account — {len(msg_ids)} msgs from {chat_id} → {target}")
+            await self._resolve_peer(target)
+            await self._stream_ids(chat_id, msg_ids, target, thread_id)
+        except Exception as e:
+            self._log(f"Fatal error: {e}")
+        finally:
+            self._finish()
+
+    async def _stream_ids(self, from_chat, msg_ids: List[int], to_chat, thread_id=None):
+        """Download each message to RAM then re-upload via user account."""
+        import io
+        from pyrogram.errors import FloodWait
+
+        total = len(msg_ids)
+        kw = {"message_thread_id": thread_id} if thread_id else {}
+
+        # Album buffering
+        album_buf: list = []
+        current_album_id = None
+
+        async def flush_album_stream():
+            nonlocal album_buf, current_album_id
+            if not album_buf:
+                return
+            ids_str = ",".join(str(it["msg_id"]) for it in album_buf)
+            self._log(f"[album {ids_str}] ส่ง {len(album_buf)} ไฟล์…")
+            self.state["current_file"] = f"album [{ids_str}] — uploading…"
+            # Build InputMedia list for send_media_group
+            from pyrogram.types import InputMediaVideo, InputMediaPhoto, InputMediaDocument, InputMediaAudio
+            media_list = []
+            for idx, it in enumerate(album_buf):
+                buf = it["buf"]
+                buf.seek(0)
+                fname = it["fname"]
+                caption = it["caption"] if idx == 0 else ""
+                ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
+                if ext in ("mp4", "mov", "avi", "mkv", "webm"):
+                    media_list.append(InputMediaVideo(buf, caption=caption))
+                elif ext in ("jpg", "jpeg", "png", "webp", "bmp"):
+                    media_list.append(InputMediaPhoto(buf, caption=caption))
+                elif ext in ("mp3", "ogg", "m4a", "flac", "wav"):
+                    media_list.append(InputMediaAudio(buf, caption=caption))
+                else:
+                    media_list.append(InputMediaDocument(buf, caption=caption))
+
+            # send_media_group in chunks of 10
+            chunks = [media_list[i:i+10] for i in range(0, len(media_list), 10)]
+            for chunk in chunks:
+                for attempt in range(5):
+                    try:
+                        await self.tg.client.send_media_group(to_chat, chunk, **kw)
+                        self.state["downloaded"] += len(chunk)
+                        self._log(f"  ✅ {len(chunk)} ไฟล์ส่งสำเร็จ")
+                        break
+                    except FloodWait as e:
+                        wait = e.value + 1
+                        self._log(f"⏳ FloodWait {wait}s…")
+                        await asyncio.sleep(wait)
+                    except Exception as e:
+                        self._log(f"  ⚠️ album send failed: {e}")
+                        self.state["skipped"] += len(chunk)
+                        break
+
+            album_buf.clear()
+            current_album_id = None
+
+        for i, msg_id in enumerate(msg_ids):
+            if not self.state["running"]:
+                self._log("หยุดแล้ว")
+                break
+
+            self.state["current"] = i + 1
+            self.state["current_progress"] = 0
+
+            try:
+                msg = await self.tg.client.get_messages(from_chat, msg_id)
+                if not msg or (not msg.media and not (msg.text and msg.text.strip())):
+                    self.state["skipped"] += 1
+                    self._log(f"[{msg_id}] ข้าม (ไม่มีสื่อ)")
+                    continue
+
+                # Text-only message
+                if not msg.media and msg.text:
+                    await flush_album_stream()
+                    for attempt in range(5):
+                        try:
+                            await self.tg.client.send_message(to_chat, msg.text, **kw)
+                            self._log(f"✅ [{msg_id}] text sent")
+                            self.state["downloaded"] += 1
+                            self.state["last_link"] = self._make_link(from_chat, msg_id)
+                            break
+                        except FloodWait as e:
+                            await asyncio.sleep(e.value + 1)
+                        except Exception as e:
+                            self._log(f"⚠️ [{msg_id}] text error: {e}")
+                            self.state["skipped"] += 1
+                            break
+                    continue
+
+                media_label = str(msg.media).split(".")[-1]
+                self._log(f"[{msg_id}] {media_label} — downloading to RAM…")
+                self.state["current_file"] = f"msg {msg_id} — downloading…"
+
+                def make_progress(mid):
+                    def _cb(cur, tot):
+                        if tot:
+                            pct = int(cur * 100 / tot)
+                            self.state["current_progress"] = pct
+                            self.state["current_file"] = f"msg {mid}  {pct}% (RAM)"
+                    return _cb
+
+                raw = await self.tg.client.download_media(
+                    msg, in_memory=True, progress=make_progress(msg_id)
+                )
+                if not raw:
+                    self._log(f"[{msg_id}] ดาวน์โหลดไม่ได้ — ข้าม")
+                    self.state["skipped"] += 1
+                    continue
+
+                data = bytes(raw.getvalue()) if hasattr(raw, "getvalue") else bytes(raw)
+                buf = io.BytesIO(data)
+                buf.name = getattr(raw, "name", f"file_{msg_id}")
+                fname = buf.name
+                caption = getattr(msg, "caption", "") or ""
+                group_id = getattr(msg, "media_group_id", None)
+
+                self._log(f"[{msg_id}] ✓ RAM ({_fmt_size(len(data))}) — uploading…")
+                self.state["current_file"] = f"msg {msg_id} — uploading…"
+                self.state["current_progress"] = 50
+
+                # Album handling
+                if group_id:
+                    if group_id != current_album_id:
+                        await flush_album_stream()
+                        current_album_id = group_id
+                    album_buf.append({"buf": buf, "fname": fname, "caption": caption, "msg_id": msg_id})
+                    self._log(f"[{msg_id}] ✓ ใน album buffer ({len(album_buf)} ไฟล์)")
+                    continue
+
+                # Flush any pending album before sending single file
+                await flush_album_stream()
+
+                ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
+                buf.seek(0)
+                for attempt in range(5):
+                    try:
+                        if ext in ("mp4", "mov", "avi", "mkv", "webm"):
+                            await self.tg.client.send_video(to_chat, buf, caption=caption, **kw)
+                        elif ext in ("jpg", "jpeg", "png", "webp", "bmp"):
+                            buf.seek(0)
+                            await self.tg.client.send_photo(to_chat, buf, caption=caption, **kw)
+                        elif ext in ("mp3", "ogg", "m4a", "flac", "wav"):
+                            await self.tg.client.send_audio(to_chat, buf, caption=caption, **kw)
+                        else:
+                            buf.seek(0)
+                            await self.tg.client.send_document(to_chat, buf, caption=caption, **kw)
+                        self._log(f"✅ [{msg_id}] ส่งสำเร็จ")
+                        self.state["downloaded"] += 1
+                        self.state["current_progress"] = 100
+                        self.state["last_link"] = self._make_link(from_chat, msg_id)
+                        await asyncio.sleep(1)
+                        break
+                    except FloodWait as e:
+                        wait = e.value + 1
+                        self._log(f"⏳ [{msg_id}] FloodWait {wait}s…")
+                        for remaining in range(wait, 0, -1):
+                            if not self.state["running"]:
+                                break
+                            self.state["current_file"] = f"⏳ FloodWait — รอ {remaining}s…"
+                            await asyncio.sleep(1)
+                        buf.seek(0)
+                    except Exception as e:
+                        self._log(f"⚠️ [{msg_id}] upload error: {e}")
+                        self.state["skipped"] += 1
+                        break
+
+            except Exception as e:
+                self._log(f"[{msg_id}] error: {e}")
+                self.state["skipped"] += 1
+
+        # Flush remaining album
+        await flush_album_stream()
+
+        ok_n = self.state["downloaded"]
+        sk_n = self.state["skipped"]
+        self._log(f"🏁 เสร็จแล้ว — ✅ {ok_n} | ข้าม {sk_n}")
+
     # ── Batch download: sequential range ──────────────────────────────────────
 
     async def run(self, link: str, count: int, start_offset: int = 0,
