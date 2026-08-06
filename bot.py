@@ -30,6 +30,16 @@ logger = logging.getLogger("bot")
 MAX_DELIVERY_BYTES = 50 * 1024 * 1024
 
 
+def _looks_like_chat_id(token: str) -> bool:
+    """True if `token` looks like a Telegram chat id/@username (a delivery
+    destination), not a plain end-post-id in a range like "link 300"."""
+    if token.startswith("@") and len(token) > 5:
+        return True
+    if token.startswith("-") and token[1:].isdigit() and len(token) >= 7:
+        return True
+    return False
+
+
 def _media_size(msg) -> int:
     """Best-effort byte size of a message's media (0 if unknown)."""
     for attr in ("video", "document", "animation", "audio", "voice", "video_note"):
@@ -54,7 +64,7 @@ COPY = {
     "th": {
         "welcome": "👋 <b>ยินดีต้อนรับ!</b>\n\nส่งลิงก์โพสต์ Telegram มาให้บอทเพื่อรับข้อความ รูป หรือวิดีโอ\n\n🎁 <b>เริ่มทดลองฟรีได้ 2 รายการ</b> ต่อ 1 บัญชี\nกด <b>เริ่มดึงเนื้อหา</b> แล้วส่งลิงก์โพสต์ได้เลย",
         "language": "🌐 <b>เลือกภาษา</b>\nคุณเปลี่ยนภาษาได้ตลอดเวลาจากเมนู",
-        "howto": "📖 <b>วิธีใช้งาน</b>\n\n<b>ก่อนเริ่ม:</b> แอดมินต้องล็อกอินบัญชี Telegram เจ้าของเข้าระบบก่อน บัญชีนี้ต้องเป็นสมาชิกกลุ่ม/แชนแนลต้นทางและมีสิทธิ์เห็นโพสต์นั้น\n\n<b>ดึง 1 โพสต์</b>\n1️⃣ เปิดโพสต์ Telegram ที่ต้องการ\n2️⃣ กด <b>คัดลอกลิงก์</b>\n3️⃣ กลับมาที่บอท แล้วกด <b>เริ่มดึงเนื้อหา</b>\n4️⃣ วางและส่งลิงก์\n\nตัวอย่าง:\n<code>https://t.me/channel_name/123</code>\n\n<b>ดึงหลายโพสต์ต่อเนื่องแบบง่าย ด้วย +N</b>\nเติม <code>+N</code> ท้ายลิงก์เพื่อดึงโพสต์นั้นและอีก N โพสต์ถัดไป เช่น:\n<code>https://t.me/channel_name/100+10</code>\nระบบจะดึงโพสต์ 100 ถึง 110 (รวม 11 โพสต์) ให้ต่อเนื่องในคำสั่งเดียว และนับเป็น 1 รายการ\n\n<b>ดึงหลายโพสต์ต่อเนื่องแบบระบุช่วง</b>\nส่งลิงก์แบบช่วงได้เลย เช่น:\n<code>https://t.me/channel_name/100-120</code>\nหรือส่งลิงก์กับเลขโพสต์สุดท้ายคั่นด้วยเว้นวรรค:\n<code>https://t.me/channel_name/100 120</code>\nระบบจะดึงโพสต์ 100 ถึง 120 ให้ต่อเนื่อง และนับเป็น 1 รายการ\n\n🎁 ทดลองฟรีได้ 2 รายการต่อบัญชี\n💎 เมื่อครบแล้ว เลือกแพ็กเกจเพื่อใช้งานไม่จำกัด\n\n<b>สำคัญ:</b> ลูกค้าไม่ต้องล็อกอินเอง แต่บัญชีเจ้าของของระบบต้องอยู่ในกลุ่ม/แชนแนลนั้นจริง หากบัญชีนี้เข้าไม่ถึงโพสต์ ระบบจะดึงไม่ได้",
+        "howto": "📖 <b>วิธีใช้งาน</b>\n\n<b>ก่อนเริ่ม:</b> แอดมินต้องล็อกอินบัญชี Telegram เจ้าของเข้าระบบก่อน บัญชีนี้ต้องเป็นสมาชิกกลุ่ม/แชนแนลต้นทางและมีสิทธิ์เห็นโพสต์นั้น\n\n<b>ดึง 1 โพสต์</b>\n1️⃣ เปิดโพสต์ Telegram ที่ต้องการ\n2️⃣ กด <b>คัดลอกลิงก์</b>\n3️⃣ กลับมาที่บอท แล้วกด <b>เริ่มดึงเนื้อหา</b>\n4️⃣ วางและส่งลิงก์\n\nตัวอย่าง:\n<code>https://t.me/channel_name/123</code>\n\n<b>ดึงหลายโพสต์ต่อเนื่องแบบง่าย ด้วย +N</b>\nเติม <code>+N</code> ท้ายลิงก์เพื่อดึงโพสต์นั้นและอีก N โพสต์ถัดไป เช่น:\n<code>https://t.me/channel_name/100+10</code>\nระบบจะดึงโพสต์ 100 ถึง 110 (รวม 11 โพสต์) ให้ต่อเนื่องในคำสั่งเดียว และนับเป็น 1 รายการ\n\n<b>ดึงหลายโพสต์ต่อเนื่องแบบระบุช่วง</b>\nส่งลิงก์แบบช่วงได้เลย เช่น:\n<code>https://t.me/channel_name/100-120</code>\nหรือส่งลิงก์กับเลขโพสต์สุดท้ายคั่นด้วยเว้นวรรค:\n<code>https://t.me/channel_name/100 120</code>\nระบบจะดึงโพสต์ 100 ถึง 120 ให้ต่อเนื่อง และนับเป็น 1 รายการ\n\n<b>ส่งตรงเข้ากลุ่ม/แชนแนลอื่น</b>\nเติมไอดีแชตปลายทางต่อท้ายลิงก์ (เว้นวรรค) เพื่อให้บอทส่งเนื้อหาเข้ากลุ่มนั้นโดยตรง แทนที่จะส่งในแชตส่วนตัว เช่น:\n<code>https://t.me/channel_name/123 -1001234567890</code>\nใช้ได้กับ +N และช่วงโพสต์ด้วย เช่น <code>https://t.me/channel_name/100+10 -1001234567890</code>\n<b>สำคัญ:</b> ต้องเชิญบอทนี้เข้ากลุ่มปลายทางและให้สิทธิ์โพสต์ข้อความก่อน\n\n🎁 ทดลองฟรีได้ 2 รายการต่อบัญชี\n💎 เมื่อครบแล้ว เลือกแพ็กเกจเพื่อใช้งานไม่จำกัด\n\n<b>สำคัญ:</b> ลูกค้าไม่ต้องล็อกอินเอง แต่บัญชีเจ้าของของระบบต้องอยู่ในกลุ่ม/แชนแนลนั้นจริง หากบัญชีนี้เข้าไม่ถึงโพสต์ ระบบจะดึงไม่ได้",
         "ready": "📎 <b>พร้อมแล้ว!</b>\nบัญชีเจ้าของระบบล็อกอินแล้ว\n\nส่งลิงก์โพสต์ Telegram ที่ต้องการดึงมาได้เลย\n\nตัวอย่าง: <code>https://t.me/channel_name/123</code>\n\n⚠️ ตรวจสอบว่าบัญชีเจ้าของระบบเป็นสมาชิกกลุ่ม/แชนแนลต้นทางแล้ว",
         "login_required": "🔐 <b>ยังเริ่มดึงไม่ได้</b>\n\nแอดมินต้องล็อกอินบัญชี Telegram เจ้าของระบบก่อน 1 ครั้ง โดยส่งคำสั่งในแชตส่วนตัวกับบอท:\n\n<code>/login +668xxxxxxxx</code>\n<code>/code 1 2 3 4 5</code> (เว้นวรรคทีละตัว กัน Telegram บล็อก)\n<code>/twofa รหัสผ่าน</code> (ถ้ามี 2FA)\n\nหลังล็อกอินแล้ว บัญชีเจ้าของระบบต้องเป็นสมาชิกกลุ่ม/แชนแนลต้นทางที่ต้องการดึงด้วย\n\nลูกค้าไม่ต้องล็อกอินเอง เมื่อพร้อมแล้วกด “เริ่มดึงเนื้อหา” อีกครั้ง",
         "access_rule": "📌 <b>เงื่อนไขการดึงเนื้อหา</b>\n\nบัญชี Telegram เจ้าของระบบต้องอยู่ในกลุ่มหรือแชนแนลต้นทาง และต้องเปิดดูโพสต์นั้นได้จริง\n\nลูกค้าเพียงส่งลิงก์โพสต์ ไม่ต้องล็อกอินบัญชีของตัวเอง\n\nหากบัญชีเจ้าของไม่ได้อยู่ในกลุ่ม/แชนแนล หรือโพสต์ถูกลบ/ไม่มีสิทธิ์ ระบบจะดึงไม่ได้",
@@ -71,6 +81,7 @@ COPY = {
         "trial_done": "🎉 ดึงสำเร็จแล้ว! เหลือสิทธิ์ทดลอง <b>{remaining}/2</b> รายการ",
         "trial_finished": "⛔ <b>คุณใช้สิทธิ์ทดลองครบ 2 รายการแล้ว</b>\n\nอัปเกรดเป็นสมาชิกเพื่อดึงเนื้อหาได้ไม่จำกัด",
         "not_understood": "❓ ไม่พบลิงก์โพสต์ Telegram\nกด “วิธีใช้งาน” เพื่อดูตัวอย่างลิงก์ที่ถูกต้อง",
+        "group_dest_no_access": "⚠️ บอทยังไม่ได้อยู่ในกลุ่ม/แชนแนลปลายทาง <code>{dest}</code> หรือไม่มีสิทธิ์ส่งข้อความ\nกรุณาเชิญบอทเข้ากลุ่ม (ให้สิทธิ์โพสต์ข้อความ) แล้วลองใหม่อีกครั้ง",
         "payment": "💳 คุณเลือกแพ็กเกจ <b>{label} — {price} บาท / {days} วัน</b>\n\nส่ง <b>ลิงก์ซองอั่งเปา TrueMoney</b> มูลค่า {price} บาทเข้ามาได้เลย",
         "fetching": "📥 กำลังดึงเนื้อหา…",
         "not_ready": "🔐 บัญชีเจ้าของระบบยังไม่ได้ล็อกอิน\nแอดมินต้องใช้ /login, /code และ /twofa (ถ้ามี) ก่อนเริ่มดึงเนื้อหา",
@@ -87,7 +98,7 @@ COPY = {
     "en": {
         "welcome": "👋 <b>Welcome!</b>\n\nSend a Telegram post link and the bot will return its text, photo, or video.\n\n🎁 <b>Get 2 free trial items</b> per account.\nTap <b>Start fetching</b>, then send a post link.",
         "language": "🌐 <b>Choose your language</b>\nYou can change it anytime from the menu.",
-        "howto": "📖 <b>How to use</b>\n\n<b>Before you start:</b> An admin must log in the owner Telegram account first. That account must be a member of the source group/channel and be able to view the post.\n\n<b>Fetch one post</b>\n1️⃣ Open the Telegram post you want\n2️⃣ Tap <b>Copy Link</b>\n3️⃣ Return here and tap <b>Start fetching</b>\n4️⃣ Paste and send the link\n\nExample:\n<code>https://t.me/channel_name/123</code>\n\n<b>Fetch multiple consecutive posts the easy way — +N</b>\nAppend <code>+N</code> to the link to fetch that post plus the next N posts, e.g.:\n<code>https://t.me/channel_name/100+10</code>\nThis fetches posts 100 through 110 (11 posts total) in one request and counts as 1 item.\n\n<b>Fetch a specific range</b>\nSend a range link, for example:\n<code>https://t.me/channel_name/100-120</code>\nOr send the link followed by the final post ID:\n<code>https://t.me/channel_name/100 120</code>\nThe bot fetches posts 100 through 120 as one request and counts it as 1 item.\n\n🎁 You get 2 trial items per account.\n💎 Upgrade after that for unlimited use.\n\n<b>Important:</b> Customers do not need to log in. The system owner account must genuinely belong to the source group/channel; otherwise the post cannot be fetched.",
+        "howto": "📖 <b>How to use</b>\n\n<b>Before you start:</b> An admin must log in the owner Telegram account first. That account must be a member of the source group/channel and be able to view the post.\n\n<b>Fetch one post</b>\n1️⃣ Open the Telegram post you want\n2️⃣ Tap <b>Copy Link</b>\n3️⃣ Return here and tap <b>Start fetching</b>\n4️⃣ Paste and send the link\n\nExample:\n<code>https://t.me/channel_name/123</code>\n\n<b>Fetch multiple consecutive posts the easy way — +N</b>\nAppend <code>+N</code> to the link to fetch that post plus the next N posts, e.g.:\n<code>https://t.me/channel_name/100+10</code>\nThis fetches posts 100 through 110 (11 posts total) in one request and counts as 1 item.\n\n<b>Fetch a specific range</b>\nSend a range link, for example:\n<code>https://t.me/channel_name/100-120</code>\nOr send the link followed by the final post ID:\n<code>https://t.me/channel_name/100 120</code>\nThe bot fetches posts 100 through 120 as one request and counts it as 1 item.\n\n<b>Deliver straight to another group/channel</b>\nAppend the destination chat id after the link (space-separated) to have the bot deliver content directly into that group instead of your private chat, e.g.:\n<code>https://t.me/channel_name/123 -1001234567890</code>\nWorks with +N and ranges too, e.g. <code>https://t.me/channel_name/100+10 -1001234567890</code>\n<b>Important:</b> the bot must first be invited into the destination group with permission to post messages.\n\n🎁 You get 2 trial items per account.\n💎 Upgrade after that for unlimited use.\n\n<b>Important:</b> Customers do not need to log in. The system owner account must genuinely belong to the source group/channel; otherwise the post cannot be fetched.",
         "ready": "📎 <b>Ready!</b>\nThe owner account is logged in.\n\nSend the Telegram post link you want to fetch.\n\nExample: <code>https://t.me/channel_name/123</code>\n\n⚠️ Make sure the owner account is a member of the source group/channel.",
         "login_required": "🔐 <b>Fetching is not ready</b>\n\nAn admin must log in the owner Telegram account once from the private bot chat:\n\n<code>/login +668xxxxxxxx</code>\n<code>/code 1 2 3 4 5</code> (space out digits so Telegram doesn't block the login)\n<code>/twofa password</code> (if 2FA is enabled)\n\nThe owner account must also be a member of the source group/channel.\n\nCustomers do not need to log in. Tap “Start fetching” again after setup.",
         "access_rule": "📌 <b>Content access rules</b>\n\nThe owner Telegram account must be a member of the source group or channel and must be able to open the post.\n\nCustomers only send the post link and do not need to log in.\n\nIf the owner account is not a member, or the post was deleted or restricted, it cannot be fetched.",
@@ -104,6 +115,7 @@ COPY = {
         "trial_done": "🎉 Done! You have <b>{remaining}/2</b> trial items left.",
         "trial_finished": "⛔ <b>You have used all 2 trial items.</b>\n\nUpgrade for unlimited content retrieval.",
         "not_understood": "❓ I couldn't find a Telegram post link.\nTap “How to use” to see a valid example.",
+        "group_dest_no_access": "⚠️ The bot isn't in the destination group/channel <code>{dest}</code>, or lacks permission to post.\nInvite the bot to the group (with permission to post messages) and try again.",
         "payment": "💳 You selected <b>{label} — {price} THB / {days} days</b>\n\nSend a <b>TrueMoney gift voucher link</b> worth {price} THB.",
         "fetching": "📥 Fetching content…",
         "not_ready": "🔐 The owner account is not logged in yet.\nAn admin must complete /login, /code, and /twofa (if enabled) before fetching.",
@@ -536,13 +548,25 @@ def build_bot(user_client) -> Client:
             await _handle_voucher(m, uid, code)
             return
 
+        # 2b) Optional destination group: "<link> <group_id>" delivers straight
+        # into that group/channel instead of the customer's private chat
+        # (same idea as the web UI's "to_chat_id" field). A destination looks
+        # like a Telegram chat id (-100xxxxxxxxxx) or an @username, so it's
+        # unambiguous vs. a plain end-post-id ("link 300").
+        dest_chat_id = None
+        body = text
+        tokens = text.split()
+        if len(tokens) >= 2 and _looks_like_chat_id(tokens[-1]):
+            dest_chat_id = tokens[-1]
+            body = " ".join(tokens[:-1])
+
         # 2) Telegram content link? (single or range: t.me/ch/100-300 or "link 300")
         try:
-            _chat, _start, _end = parse_link(text)
-            link, end_override = text, None
+            _chat, _start, _end = parse_link(body)
+            link, end_override = body, None
         except ValueError:
             # Check "link end_id" format: "https://t.me/ch/100 300"
-            parts = text.rsplit(None, 1)
+            parts = body.rsplit(None, 1)
             if len(parts) == 2 and parts[1].isdigit():
                 try:
                     _chat, _start, _end = parse_link(parts[0])
@@ -557,7 +581,7 @@ def build_bot(user_client) -> Client:
             await m.reply_text(tr(lang, "not_understood"), reply_markup=main_keyboard(lang))
             return
 
-        await _handle_content(m, uid, link, end_override)
+        await _handle_content(m, uid, link, end_override, dest_chat_id)
 
     async def _handle_voucher(m: Message, uid: int, code: str):
         if not config.TRUEMONEY_WALLET_PHONE:
@@ -620,7 +644,9 @@ def build_bot(user_client) -> Client:
             f"ผู้ใช้: {uid} (@{m.from_user.username})"
         )
 
-    async def _handle_content(m: Message, uid: int, link: str, end_override: int = None):
+    async def _handle_content(
+        m: Message, uid: int, link: str, end_override: int = None, dest_chat_id: str = None,
+    ):
         active = await db.is_active(uid)
         user = await db.get_user(uid)
         lang = user.get("language", "th") if user else "th"
@@ -635,6 +661,23 @@ def build_bot(user_client) -> Client:
             await m.reply_text(tr(lang, "not_ready"))
             await notify_admin("⚠️ มีผู้ใช้ส่งลิงก์แต่บัญชีเจ้าของยังไม่ได้ล็อกอิน (/login)")
             return
+
+        if dest_chat_id:
+            # The bot must itself be a member (with send rights) of the
+            # destination group/channel — it delivers via the Bot API, not
+            # through the owner's user account.
+            try:
+                member = await bot.get_chat_member(dest_chat_id, "me")
+                can_post = getattr(member, "privileges", None) is None or getattr(
+                    member.privileges, "can_post_messages", True
+                )
+                if member.status not in ("member", "administrator", "owner") or not can_post:
+                    raise ValueError("no permission")
+            except Exception:
+                await m.reply_text(
+                    tr(lang, "group_dest_no_access", dest=dest_chat_id)
+                )
+                return
 
         # Determine range
         chat_id, start_id, end_id = parse_link(link)
@@ -651,6 +694,7 @@ def build_bot(user_client) -> Client:
         ctx = {
             "link": link, "active": active, "lang": lang, "delay": delay,
             "is_range": is_range, "start_id": start_id, "end_id": end_id,
+            "dest_chat_id": dest_chat_id,
         }
 
         if preview_enabled:
@@ -664,16 +708,20 @@ def build_bot(user_client) -> Client:
         customer confirms a Core-plan link preview."""
         link, active, lang, delay = ctx["link"], ctx["active"], ctx["lang"], ctx["delay"]
         is_range, start_id, end_id = ctx["is_range"], ctx["start_id"], ctx["end_id"]
+        dest_chat_id = ctx.get("dest_chat_id")
 
         if is_range:
             msg_count = end_id - start_id + 1
+            dest_note = f" → {dest_chat_id}" if dest_chat_id else ""
             status = await m.reply_text(
-                f"📥 กำลังดึง {msg_count} โพสต์ ({start_id}–{end_id})…"
+                f"📥 กำลังดึง {msg_count} โพสต์ ({start_id}–{end_id}){dest_note}…"
                 if lang == "th" else
-                f"📥 Fetching {msg_count} posts ({start_id}–{end_id})…"
+                f"📥 Fetching {msg_count} posts ({start_id}–{end_id}){dest_note}…"
             )
             try:
-                delivered = await _fetch_and_deliver_range(m, uid, link, start_id, end_id, status, lang, delay)
+                delivered = await _fetch_and_deliver_range(
+                    m, uid, link, start_id, end_id, status, lang, delay, dest_chat_id,
+                )
             except Exception:
                 logger.exception("range fetch failed")
                 delivered = False
@@ -681,7 +729,7 @@ def build_bot(user_client) -> Client:
         else:
             status = await m.reply_text(tr(lang, "fetching"))
             try:
-                delivered = await _fetch_and_deliver(m, uid, link, status, lang)
+                delivered = await _fetch_and_deliver(m, uid, link, status, lang, dest_chat_id)
             except Exception:
                 logger.exception("fetch failed")
                 delivered = False
@@ -757,14 +805,17 @@ def build_bot(user_client) -> Client:
 
     async def _fetch_and_deliver_range(
         m: Message, uid: int, link: str, start_id: int, end_id: int, status, lang: str,
-        delay: float = config.DEFAULT_DELAY,
+        delay: float = config.DEFAULT_DELAY, dest_chat_id: str = None,
     ) -> bool:
         """Fetch a range of posts and deliver them one by one. Returns True if at least one was delivered.
 
         `delay` (seconds) paces each delivery and comes from the customer's
         plan tier (lite=17s, medium=5s, core=1.5s) — this is the concrete
         difference in "how fast a job finishes" between plans.
+        `dest_chat_id`, when set, delivers straight into that group/channel
+        instead of the customer's own private chat with the bot.
         """
+        target = dest_chat_id or uid
         chat_id, _s, _e = parse_link(link)
         total = end_id - start_id + 1
         delivered_count = 0
@@ -788,7 +839,7 @@ def build_bot(user_client) -> Client:
                 )
 
                 if not msg.media and msg.text:
-                    await bot.send_message(uid, msg.text)
+                    await bot.send_message(target, msg.text)
                     delivered_count += 1
                     await asyncio.sleep(delay)
                     continue
@@ -806,7 +857,7 @@ def build_bot(user_client) -> Client:
                 data = bytes(raw.getvalue()) if hasattr(raw, "getvalue") else bytes(raw)
                 fname = getattr(raw, "name", f"file_{msg_id}")
                 caption = getattr(msg, "caption", "") or ""
-                forwarder = BotForwarder(config.BOT_TOKEN, str(uid))
+                forwarder = BotForwarder(config.BOT_TOKEN, str(target))
                 ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
 
                 def _send(d=data, fn=fname, cap=caption, ex=ext):
@@ -841,10 +892,15 @@ def build_bot(user_client) -> Client:
         return delivered_count > 0
 
     async def _fetch_and_deliver(
-        m: Message, uid: int, link: str, status, lang: str
+        m: Message, uid: int, link: str, status, lang: str, dest_chat_id: str = None,
     ) -> bool:
         """Fetch content and deliver via the bot. Returns True only if the
-        customer actually received content (so usage is counted only then)."""
+        customer actually received content (so usage is counted only then).
+
+        `dest_chat_id`, when set, delivers straight into that group/channel
+        instead of the customer's own private chat with the bot.
+        """
+        target = dest_chat_id or uid
         chat_id, msg_id, _end = parse_link(link)
         msg = await user_client.client.get_messages(chat_id, msg_id)
         if not msg or (not msg.media and not (msg.text and msg.text.strip())):
@@ -853,7 +909,7 @@ def build_bot(user_client) -> Client:
 
         # Text-only
         if not msg.media and msg.text:
-            await bot.send_message(uid, msg.text)
+            await bot.send_message(target, msg.text)
             await status.edit_text(tr(lang, "text_sent"))
             return True
 
@@ -885,8 +941,9 @@ def build_bot(user_client) -> Client:
 
         await status.edit_text(tr(lang, "uploading", size=_fmt_size(len(data))))
 
-        # Deliver through the bot so it reliably reaches the customer.
-        forwarder = BotForwarder(config.BOT_TOKEN, str(uid))
+        # Deliver through the bot so it reliably reaches the customer (or the
+        # destination group, if one was specified).
+        forwarder = BotForwarder(config.BOT_TOKEN, str(target))
         ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
 
         def _send_blocking():
