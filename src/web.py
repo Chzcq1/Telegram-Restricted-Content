@@ -379,6 +379,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
       <p><strong style="color:var(--text)">ดึงหลายโพสต์ต่อเนื่อง:</strong> ใส่ลิงก์โพสต์แรก แล้วตั้งค่า <b>Message count</b> เป็นจำนวนที่ต้องการ เช่น 20 จากนั้นกด Download Range</p>
       <p><strong style="color:var(--text)">เลือกเฉพาะบางโพสต์:</strong> กด Scan &amp; Preview → เลือกรายการหรือ Select All → กด Download Selected</p>
       <p><strong style="color:var(--text)">ดึงเป็นช่วงจากลิงก์:</strong> ใช้รูปแบบ <code style="background:var(--surface);padding:2px 5px;border-radius:4px">https://t.me/channel/100-120</code> แล้วระบบจะดึงโพสต์ 100–120 ต่อเนื่อง</p>
+      <p><strong style="color:var(--text)">ดึงต่อจากลิงก์ด้วย +N:</strong> ใช้รูปแบบ <code style="background:var(--surface);padding:2px 5px;border-radius:4px">https://t.me/channel/100+10</code> เพื่อดึงโพสต์ 100 ถึง 110 (อีก 10 โพสต์ถัดไป) — ช่อง Message count จะเติมให้อัตโนมัติ</p>
       <p><strong style="color:var(--text)">ดึงทั้ง Topic:</strong> ใช้ส่วน Clone Topic แล้วใส่ลิงก์ข้อความแรกและปลายทาง</p>
       <p style="color:var(--amber)">หมายเหตุ: ระบบทำทีละงาน ต้องรอ progress งานปัจจุบันเสร็จก่อนเริ่มงานถัดไป</p>
     </div>
@@ -448,7 +449,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
     </div>
 
     <div class="space-y-3">
-      <input id="dl-link" type="text" placeholder="https://t.me/c/1234567890/100"/>
+      <input id="dl-link" type="text" placeholder="https://t.me/c/1234567890/100  (หรือ .../100+10, .../100-120)" oninput="syncCountFromLink()"/>
       <div class="grid grid-cols-2 gap-3">
         <div>
           <p class="text-xs mb-1" style="color:var(--muted)">Message count</p>
@@ -799,10 +800,31 @@ async function startClone() {
   } else alert(d.error || 'ไม่สามารถเริ่มได้');
 }
 
+/* ─── +N / range link parsing ───
+   Lets users type "https://t.me/ch/100+10" or "https://t.me/ch/100-110"
+   directly in the link field instead of setting Count manually.
+   +N means "N additional posts", so count = N + 1. */
+function extractLinkCount(rawLink) {
+  const m = rawLink.match(/^(https:\/\/t\.me\/(?:c\/\d+|[^\/?]+)\/(\d+))(?:\/?\+(\d+)|-(\d+))?$/);
+  if (!m) return { link: rawLink, count: null };
+  const baseLink = m[1];
+  const start = parseInt(m[2]);
+  if (m[3]) return { link: baseLink, count: parseInt(m[3]) + 1 };
+  if (m[4]) return { link: baseLink, count: parseInt(m[4]) - start + 1 };
+  return { link: rawLink, count: null };
+}
+
+function syncCountFromLink() {
+  const raw = document.getElementById('dl-link').value.trim();
+  const { count } = extractLinkCount(raw);
+  if (count) document.getElementById('dl-count').value = count;
+}
+
 /* ─── Scan & Preview ─── */
 async function scanPreview() {
-  const link = document.getElementById('dl-link').value.trim();
-  const count = Math.min(parseInt(document.getElementById('dl-count').value) || 10, 24);
+  const raw = document.getElementById('dl-link').value.trim();
+  const { link, count: linkCount } = extractLinkCount(raw);
+  const count = Math.min(linkCount || parseInt(document.getElementById('dl-count').value) || 10, 24);
   const offset = parseInt(document.getElementById('dl-offset').value) || 0;
   if (!link) { alert('Enter a Telegram link first.'); return; }
 
@@ -898,8 +920,9 @@ async function downloadScanned() {
 
 /* ─── Batch download ─── */
 async function startBatch() {
-  const link = document.getElementById('dl-link').value.trim();
-  const count = parseInt(document.getElementById('dl-count').value) || 10;
+  const raw = document.getElementById('dl-link').value.trim();
+  const { link, count: linkCount } = extractLinkCount(raw);
+  const count = linkCount || parseInt(document.getElementById('dl-count').value) || 10;
   const offset = parseInt(document.getElementById('dl-offset').value) || 0;
   if (!link) { alert('Enter a Telegram link.'); return; }
   let url, body;

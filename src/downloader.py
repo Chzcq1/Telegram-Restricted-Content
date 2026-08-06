@@ -129,28 +129,42 @@ class BotForwarder:
 def parse_link(link: str):
     """Parse a Telegram post link.
 
-    Supports both single-post and range formats:
+    Supports single-post, range, and "+N" (extra posts) formats:
       https://t.me/channel/123           → ('channel', 123, None)
       https://t.me/c/1234567890/123      → (-1001234567890, 123, None)
       https://t.me/channel/100-300       → ('channel', 100, 300)   # range
       https://t.me/c/1234567890/100-300  → (int_id, 100, 300)       # range
+      https://t.me/channel/100+10        → ('channel', 100, 110)   # +N: N more posts
+      https://t.me/channel/100/+10       → ('channel', 100, 110)   # +N with slash
+
+    "+N" means "N additional posts after the one in the link", so the total
+    delivered is N+1 (e.g. "100+10" fetches posts 100 through 110 inclusive).
 
     Returns (chat_id, start_id, end_id).
     end_id is None for single-post links.
     """
     link = link.strip()
-    private = re.match(r"https://t\.me/c/(\d+)/(\d+)(?:-(\d+))?", link)
+    private = re.match(r"https://t\.me/c/(\d+)/(\d+)(?:/?\+(\d+)|-(\d+))?", link)
     if private:
         chat_id = int(f"-100{private.group(1)}")
         start_id = int(private.group(2))
-        end_id = int(private.group(3)) if private.group(3) else None
+        end_id = _resolve_end_id(start_id, private.group(3), private.group(4))
         return chat_id, start_id, end_id
-    public = re.match(r"https://t\.me/([^/?]+)/(\d+)(?:-(\d+))?", link)
+    public = re.match(r"https://t\.me/([^/?]+)/(\d+)(?:/?\+(\d+)|-(\d+))?", link)
     if public:
         start_id = int(public.group(2))
-        end_id = int(public.group(3)) if public.group(3) else None
+        end_id = _resolve_end_id(start_id, public.group(3), public.group(4))
         return public.group(1), start_id, end_id
     raise ValueError(f"Unrecognised link format: {link}")
+
+
+def _resolve_end_id(start_id: int, plus_n: Optional[str], range_end: Optional[str]) -> Optional[int]:
+    """Given the raw regex captures for '+N' or '-END', compute the final end_id."""
+    if plus_n:
+        return start_id + int(plus_n)
+    if range_end:
+        return int(range_end)
+    return None
 
 
 def parse_target_chat(to_chat_id: str):
