@@ -43,6 +43,10 @@ def _media_size(msg) -> int:
 # Pending action per user: e.g. waiting for a voucher for a chosen plan.
 _pending_plan: dict[int, str] = {}
 
+# Pending fetch context per user, awaiting Core-plan preview confirmation
+# (link matches expected content?) before the real fetch runs.
+_pending_fetch: dict[int, dict] = {}
+
 
 # ── Bilingual customer-facing copy ───────────────────────────────────────────
 
@@ -62,12 +66,12 @@ COPY = {
         "language_btn": "🌐 ภาษา / Language",
         "help_btn": "🎧 ช่วยเหลือ",
         "trial": "🎁 โปรทดลองคงเหลือ: <b>{remaining}/2</b> รายการ",
-        "member": "✅ <b>สมาชิกใช้งานได้</b>\n{expiry}\nใช้งานสำเร็จ: {jobs} ครั้ง",
+        "member": "✅ <b>สมาชิกใช้งานได้ — แพ็ก {plan_label}</b>\n{expiry}\nใช้งานสำเร็จ: {jobs} ครั้ง\n⚡ ความเร็ว: ~{delay} วิ/รายการ{preview_note}",
         "nonmember": "📋 <b>สถานะของฉัน</b>\nยังไม่ได้เป็นสมาชิก\n{trial}\n\nกด “เริ่มดึงเนื้อหา” เพื่อใช้สิทธิ์ทดลอง หรืออัปเกรดเพื่อใช้งานไม่จำกัด",
         "trial_done": "🎉 ดึงสำเร็จแล้ว! เหลือสิทธิ์ทดลอง <b>{remaining}/2</b> รายการ",
         "trial_finished": "⛔ <b>คุณใช้สิทธิ์ทดลองครบ 2 รายการแล้ว</b>\n\nอัปเกรดเป็นสมาชิกเพื่อดึงเนื้อหาได้ไม่จำกัด",
         "not_understood": "❓ ไม่พบลิงก์โพสต์ Telegram\nกด “วิธีใช้งาน” เพื่อดูตัวอย่างลิงก์ที่ถูกต้อง",
-        "payment": "💳 คุณเลือกแพ็กเกจ <b>{label} — {price} บาท</b>\n\nส่ง <b>ลิงก์ซองอั่งเปา TrueMoney</b> มูลค่า {price} บาทเข้ามาได้เลย",
+        "payment": "💳 คุณเลือกแพ็กเกจ <b>{label} — {price} บาท / {days} วัน</b>\n\nส่ง <b>ลิงก์ซองอั่งเปา TrueMoney</b> มูลค่า {price} บาทเข้ามาได้เลย",
         "fetching": "📥 กำลังดึงเนื้อหา…",
         "not_ready": "🔐 บัญชีเจ้าของระบบยังไม่ได้ล็อกอิน\nแอดมินต้องใช้ /login, /code และ /twofa (ถ้ามี) ก่อนเริ่มดึงเนื้อหา",
         "access_denied": "⚠️ บัญชีเจ้าของระบบเข้าไม่ถึงโพสต์นี้\n\nตรวจสอบว่าบัญชีเจ้าของเป็นสมาชิกกลุ่ม/แชนแนลต้นทาง และยังเปิดดูโพสต์นี้ได้ จากนั้นลองส่งลิงก์ใหม่",
@@ -95,12 +99,12 @@ COPY = {
         "language_btn": "🌐 Language / ภาษา",
         "help_btn": "🎧 Help",
         "trial": "🎁 Trial remaining: <b>{remaining}/2</b> items",
-        "member": "✅ <b>Active member</b>\n{expiry}\nCompleted: {jobs} items",
+        "member": "✅ <b>Active member — {plan_label} plan</b>\n{expiry}\nCompleted: {jobs} items\n⚡ Speed: ~{delay}s/item{preview_note}",
         "nonmember": "📋 <b>My status</b>\nNo active membership\n{trial}\n\nTap “Start fetching” to use your trial, or upgrade for unlimited access.",
         "trial_done": "🎉 Done! You have <b>{remaining}/2</b> trial items left.",
         "trial_finished": "⛔ <b>You have used all 2 trial items.</b>\n\nUpgrade for unlimited content retrieval.",
         "not_understood": "❓ I couldn't find a Telegram post link.\nTap “How to use” to see a valid example.",
-        "payment": "💳 You selected <b>{label} — {price} THB</b>\n\nSend a <b>TrueMoney gift voucher link</b> worth {price} THB.",
+        "payment": "💳 You selected <b>{label} — {price} THB / {days} days</b>\n\nSend a <b>TrueMoney gift voucher link</b> worth {price} THB.",
         "fetching": "📥 Fetching content…",
         "not_ready": "🔐 The owner account is not logged in yet.\nAn admin must complete /login, /code, and /twofa (if enabled) before fetching.",
         "access_denied": "⚠️ The owner account cannot access this post.\n\nMake sure it is a member of the source group/channel and can still open the post, then try again.",
@@ -120,12 +124,16 @@ def tr(lang: str, key: str, **values) -> str:
     return COPY.get(lang, COPY["th"])[key].format(**values)
 
 
+_PLAN_ICON = {"lite": "🐢", "medium": "🚴", "core": "🚀"}
+
+
 def plan_keyboard(lang: str = "th") -> InlineKeyboardMarkup:
     rows = []
     for key, plan in config.PLANS.items():
+        icon = _PLAN_ICON.get(key, "📅")
         rows.append([
             InlineKeyboardButton(
-                f"📅 {plan['label']} — {plan['price']}฿",
+                f"{icon} {plan['label']} — {plan['price']}฿ ({plan['days']} วัน, ~{plan['delay']}s/รายการ)",
                 callback_data=f"buy:{key}",
             )
         ])
@@ -261,10 +269,21 @@ def build_bot(user_client) -> Client:
         remaining = max(0, config.TRIAL_MAX_ITEMS - trial_used)
         trial = tr(lang, "trial", remaining=remaining)
         if active:
+            plan_key = u.get("plan_key", "") if u else ""
+            plan = config.PLANS.get(plan_key)
+            plan_label = plan["label"] if plan else "-"
+            delay, preview = config.plan_speed(plan_key)
+            preview_note = (
+                (" + พรีวิวลิงก์ก่อนดึงจริง" if lang == "th" else " + link preview before fetching")
+                if preview else ""
+            )
             txt = tr(
                 lang, "member",
                 expiry=_fmt_expiry(int(u.get("expires_at", 0))),
                 jobs=u.get("total_jobs", 0),
+                plan_label=plan_label,
+                delay=delay,
+                preview_note=preview_note,
             )
         else:
             txt = tr(lang, "nonmember", trial=trial)
@@ -484,9 +503,19 @@ def build_bot(user_client) -> Client:
                 return
             _pending_plan[uid] = f"pay:{key}"
             await cq.message.reply_text(
-                tr(lang, "payment", label=plan["label"], price=plan["price"])
+                tr(lang, "payment", label=plan["label"], price=plan["price"], days=plan["days"])
             )
             await cq.answer()
+        elif data == "confirm_fetch":
+            ctx = _pending_fetch.pop(uid, None)
+            await cq.answer()
+            if not ctx:
+                await cq.message.reply_text(tr(lang, "not_understood"), reply_markup=main_keyboard(lang))
+                return
+            await _run_fetch(cq.message, uid, ctx)
+        elif data == "cancel_fetch":
+            _pending_fetch.pop(uid, None)
+            await cq.answer("ยกเลิกแล้ว" if lang == "th" else "Cancelled")
         else:
             await cq.answer()
 
@@ -575,11 +604,15 @@ def build_bot(user_client) -> Client:
             )
         # Finalize the voucher and grant the subscription in ONE transaction —
         # a paid voucher is never marked used without granting entitlement.
-        exp = await db.finalize_and_grant(code, uid, amount, plan["days"])
+        # The matched plan's key (not necessarily chosen_key, if amount differed)
+        # sets the delivery speed/preview the customer actually gets.
+        exp = await db.finalize_and_grant(code, uid, amount, plan["days"], key)
         _pending_plan.pop(uid, None)
+        preview_note = " + พรีวิวลิงก์ก่อนดึงจริง" if plan.get("preview") else ""
         await status.edit_text(
             f"🎉 ชำระเงินสำเร็จ! เปิดสมาชิก <b>{plan['label']}</b> แล้ว\n"
-            f"อายุสมาชิก: {_fmt_expiry(exp)}\n\n"
+            f"อายุสมาชิก: {_fmt_expiry(exp)}\n"
+            f"⚡ ความเร็ว: ~{plan['delay']} วิ/รายการ{preview_note}\n\n"
             "ส่งลิงก์โพสต์ Telegram เข้ามาเพื่อเริ่มดึงเนื้อหาได้เลย 🚀"
         )
         await notify_admin(
@@ -604,10 +637,33 @@ def build_bot(user_client) -> Client:
             return
 
         # Determine range
-        _chat_id, start_id, end_id = parse_link(link)
+        chat_id, start_id, end_id = parse_link(link)
         if end_override is not None:
             end_id = end_override
         is_range = end_id is not None and end_id > start_id
+
+        # Speed/preview are set by the customer's active plan tier
+        # (lite/medium/core). Non-members / trial users get the default
+        # (slowest, no preview) pace.
+        plan_key = user.get("plan_key", "") if (user and active) else ""
+        delay, preview_enabled = config.plan_speed(plan_key)
+
+        ctx = {
+            "link": link, "active": active, "lang": lang, "delay": delay,
+            "is_range": is_range, "start_id": start_id, "end_id": end_id,
+        }
+
+        if preview_enabled:
+            await _send_preview(m, uid, chat_id, start_id, lang, ctx)
+            return
+
+        await _run_fetch(m, uid, ctx)
+
+    async def _run_fetch(m: Message, uid: int, ctx: dict):
+        """Runs the actual fetch/delivery — either directly, or after the
+        customer confirms a Core-plan link preview."""
+        link, active, lang, delay = ctx["link"], ctx["active"], ctx["lang"], ctx["delay"]
+        is_range, start_id, end_id = ctx["is_range"], ctx["start_id"], ctx["end_id"]
 
         if is_range:
             msg_count = end_id - start_id + 1
@@ -617,7 +673,7 @@ def build_bot(user_client) -> Client:
                 f"📥 Fetching {msg_count} posts ({start_id}–{end_id})…"
             )
             try:
-                delivered = await _fetch_and_deliver_range(m, uid, link, start_id, end_id, status, lang)
+                delivered = await _fetch_and_deliver_range(m, uid, link, start_id, end_id, status, lang, delay)
             except Exception:
                 logger.exception("range fetch failed")
                 delivered = False
@@ -643,10 +699,72 @@ def build_bot(user_client) -> Client:
                     reply_markup=main_keyboard(lang) if remaining else plan_keyboard(lang),
                 )
 
+    async def _send_preview(m: Message, uid: int, chat_id, start_id: int, lang: str, ctx: dict):
+        """Core-plan feature: show a thumbnail/preview of the linked post so the
+        customer can confirm it matches what they expect BEFORE the real fetch
+        (and its usage count) runs."""
+        try:
+            msg = await user_client.client.get_messages(chat_id, start_id)
+        except Exception as e:
+            logger.warning(f"preview fetch failed: {e}")
+            msg = None
+
+        if not msg or (not msg.media and not (msg.text and msg.text.strip())):
+            await m.reply_text(tr(lang, "not_found"))
+            return
+
+        _pending_fetch[uid] = ctx
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ ยืนยัน ดึงเลย" if lang == "th" else "✅ Confirm, fetch it",
+                                  callback_data="confirm_fetch"),
+            InlineKeyboardButton("❌ ยกเลิก" if lang == "th" else "❌ Cancel",
+                                  callback_data="cancel_fetch"),
+        ]])
+        caption = (
+            "🔍 <b>พรีวิว (Core)</b> — ตรวจสอบก่อนดึงจริง"
+            if lang == "th" else
+            "🔍 <b>Preview (Core)</b> — confirm before the real fetch"
+        )
+        if msg.caption:
+            caption += f"\n\n{msg.caption[:200]}"
+        elif msg.text:
+            caption += f"\n\n{msg.text[:200]}"
+
+        thumb_bytes = None
+        try:
+            thumbs = None
+            if msg.video:
+                thumbs = getattr(msg.video, "thumbs", None)
+            elif msg.document:
+                thumbs = getattr(msg.document, "thumbs", None)
+            elif msg.animation:
+                thumbs = getattr(msg.animation, "thumbs", None)
+            if thumbs:
+                raw = await user_client.client.download_media(thumbs[-1], in_memory=True)
+            elif msg.photo:
+                raw = await user_client.client.download_media(msg, in_memory=True)
+            else:
+                raw = None
+            if raw:
+                thumb_bytes = bytes(raw.getvalue()) if hasattr(raw, "getvalue") else bytes(raw)
+        except Exception:
+            pass  # preview thumbnail is best-effort; text preview still works
+
+        if thumb_bytes:
+            await m.reply_photo(io.BytesIO(thumb_bytes), caption=caption, reply_markup=kb)
+        else:
+            await m.reply_text(caption, reply_markup=kb)
+
     async def _fetch_and_deliver_range(
-        m: Message, uid: int, link: str, start_id: int, end_id: int, status, lang: str
+        m: Message, uid: int, link: str, start_id: int, end_id: int, status, lang: str,
+        delay: float = config.DEFAULT_DELAY,
     ) -> bool:
-        """Fetch a range of posts and deliver them one by one. Returns True if at least one was delivered."""
+        """Fetch a range of posts and deliver them one by one. Returns True if at least one was delivered.
+
+        `delay` (seconds) paces each delivery and comes from the customer's
+        plan tier (lite=17s, medium=5s, core=1.5s) — this is the concrete
+        difference in "how fast a job finishes" between plans.
+        """
         chat_id, _s, _e = parse_link(link)
         total = end_id - start_id + 1
         delivered_count = 0
@@ -672,7 +790,7 @@ def build_bot(user_client) -> Client:
                 if not msg.media and msg.text:
                     await bot.send_message(uid, msg.text)
                     delivered_count += 1
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(delay)
                     continue
 
                 size = _media_size(msg)
@@ -708,7 +826,7 @@ def build_bot(user_client) -> Client:
                     delivered_count += 1
                 else:
                     skipped_count += 1
-                await asyncio.sleep(2)
+                await asyncio.sleep(delay)
 
             except Exception as e:
                 logger.warning(f"range fetch msg {msg_id}: {e}")

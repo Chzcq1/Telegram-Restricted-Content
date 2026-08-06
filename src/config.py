@@ -19,13 +19,62 @@ TRUEMONEY_WALLET_PHONE = os.environ.get("TRUEMONEY_WALLET_PHONE", "")
 # Support contact shown on the "ช่วยเหลือ" button.
 SUPPORT_CONTACT = os.environ.get("SUPPORT_CONTACT", "@Signals899")
 
-# Subscription plans: key -> (label, days, price_baht)
+# Subscription plans: key -> plan details.
 # The price must match the exact voucher amount for that plan to be granted.
+# All plans run for the same duration (15 days) and differ by processing
+# speed and features:
+#   delay: seconds the bot waits between delivering each item in a job
+#          (lower = faster; this is the per-item pacing during range/+N fetches)
+#   preview: whether the customer gets a thumbnail/preview to confirm the link
+#            matches the expected content BEFORE the real fetch runs
 PLANS = {
-    "p15": {"days": 15, "price": 350, "label": "15 วัน"},
-    "p30": {"days": 30, "price": 500, "label": "30 วัน"},
-    "p90": {"days": 90, "price": 800, "label": "90 วัน"},
+    "lite": {
+        "days": 15,
+        "price": 250,
+        "label": "Lite",
+        "delay": 17,
+        "preview": False,
+        "features": [
+            "ดึงเนื้อหาได้ไม่จำกัดจำนวนภายใน 15 วัน",
+            "ความเร็วมาตรฐาน — ประมวลผล ~17 วิ/งาน",
+        ],
+    },
+    "medium": {
+        "days": 15,
+        "price": 450,
+        "label": "Medium",
+        "delay": 5,
+        "preview": False,
+        "features": [
+            "ดึงเนื้อหาได้ไม่จำกัดจำนวนภายใน 15 วัน",
+            "ความเร็วปานกลาง — ประมวลผล ~5 วิ/งาน (เร็วกว่า Lite ~3 เท่า)",
+        ],
+    },
+    "core": {
+        "days": 15,
+        "price": 800,
+        "label": "Core",
+        "delay": 1.5,
+        "preview": True,
+        "features": [
+            "ดึงเนื้อหาได้ไม่จำกัดจำนวนภายใน 15 วัน",
+            "ความเร็วสูงสุด — ประมวลผล ~1.5 วิ/งาน",
+            "พรีวิวลิงก์ก่อนดึงจริง — เห็นภาพตัวอย่าง/รายละเอียดโพสต์ ยืนยันว่าตรงกับที่ต้องการก่อนกดดึง",
+        ],
+    },
 }
+
+# Fallback speed/preview for users without an active plan (trial / expired).
+DEFAULT_DELAY = 17
+DEFAULT_PREVIEW = False
+
+
+def plan_speed(plan_key: str):
+    """Return (delay_seconds, preview_enabled) for a given plan key."""
+    plan = PLANS.get(plan_key or "")
+    if not plan:
+        return DEFAULT_DELAY, DEFAULT_PREVIEW
+    return plan.get("delay", DEFAULT_DELAY), plan.get("preview", DEFAULT_PREVIEW)
 
 # One-time trial: non-members may successfully retrieve this many items in total.
 TRIAL_MAX_ITEMS = 2

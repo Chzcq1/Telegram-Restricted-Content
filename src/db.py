@@ -18,6 +18,7 @@ async def init_db():
                 user_id     INTEGER PRIMARY KEY,
                 username    TEXT,
                 expires_at  INTEGER DEFAULT 0,   -- unix ts; 0 = no subscription
+                plan_key    TEXT DEFAULT '',      -- last purchased plan (lite/medium/core)
                 total_jobs  INTEGER DEFAULT 0,
                 trial_used  INTEGER DEFAULT 0,
                 language    TEXT DEFAULT 'th',
@@ -50,6 +51,8 @@ async def init_db():
             await db.execute("ALTER TABLE users ADD COLUMN trial_used INTEGER DEFAULT 0")
         if "language" not in columns:
             await db.execute("ALTER TABLE users ADD COLUMN language TEXT DEFAULT 'th'")
+        if "plan_key" not in columns:
+            await db.execute("ALTER TABLE users ADD COLUMN plan_key TEXT DEFAULT ''")
         await db.commit()
 
 
@@ -89,25 +92,38 @@ async def is_active(user_id: int) -> bool:
     return bool(u) and int(u.get("expires_at", 0)) > int(time.time())
 
 
-async def _extend_stmt(db, user_id: int, days: int, now: int):
+async def _extend_stmt(db, user_id: int, days: int, now: int, plan_key: str = None):
     """Atomically extend expiry within a single SQL statement.
 
     New expiry = MAX(current_expiry, now) + days. Because the computation reads
     the row's own value inside the UPDATE, concurrent extensions for the same
     user stack correctly instead of one overwriting the other. Upsert also covers
     first-time payers who never sent /start.
+
+    If `plan_key` is given, it becomes the user's active plan tier (used to pick
+    delivery speed/preview). Admin grants (plan_key=None) extend days without
+    changing the tier.
     """
     delta = days * 86400
-    await db.execute(
-        "INSERT INTO users (user_id, expires_at, created_at) VALUES (?, ?, ?) "
-        "ON CONFLICT(user_id) DO UPDATE SET "
-        "expires_at = MAX(users.expires_at, ?) + ?",
-        (user_id, now + delta, now, now, delta),
-    )
+    if plan_key is not None:
+        await db.execute(
+            "INSERT INTO users (user_id, expires_at, plan_key, created_at) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET "
+            "expires_at = MAX(users.expires_at, ?) + ?, plan_key = ?",
+            (user_id, now + delta, plan_key, now, now, delta, plan_key),
+        )
+    else:
+        await db.execute(
+            "INSERT INTO users (user_id, expires_at, created_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET "
+            "expires_at = MAX(users.expires_at, ?) + ?",
+            (user_id, now + delta, now, now, delta),
+        )
 
 
 async def add_subscription(user_id: int, days: int) -> int:
-    """Extend the user's subscription by `days`. Returns new expiry unix ts."""
+    """Extend the user's subscription by `days` (admin grant; plan tier unchanged).
+    Returns new expiry unix ts."""
     now = int(time.time())
     async with aiosqlite.connect(DB_PATH) as db:
         await _extend_stmt(db, user_id, days, now)
@@ -119,11 +135,12 @@ async def add_subscription(user_id: int, days: int) -> int:
         return int(row[0]) if row else now + days * 86400
 
 
-async def finalize_and_grant(code: str, user_id: int, amount: float, days: int) -> int:
+async def finalize_and_grant(code: str, user_id: int, amount: float, days: int, plan_key: str) -> int:
     """Record the voucher amount AND extend the subscription in one transaction.
 
     Either both the voucher is finalized and the subscription granted, or neither
     is — so a paid voucher is never marked used without granting the entitlement.
+    Sets the user's plan_key so delivery speed/preview match what they paid for.
     Returns the new expiry unix ts.
     """
     now = int(time.time())
@@ -134,7 +151,7 @@ async def finalize_and_grant(code: str, user_id: int, amount: float, days: int) 
                 "UPDATE vouchers SET amount=?, redeemed_at=? WHERE code=?",
                 (amount, now, code),
             )
-            await _extend_stmt(db, user_id, days, now)
+            await _extend_stmt(db, user_id, days, now, plan_key=plan_key)
             await db.commit()
         except Exception:
             await db.rollback()
