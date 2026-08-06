@@ -19,6 +19,8 @@ async def init_db():
                 username    TEXT,
                 expires_at  INTEGER DEFAULT 0,   -- unix ts; 0 = no subscription
                 total_jobs  INTEGER DEFAULT 0,
+                trial_used  INTEGER DEFAULT 0,
+                language    TEXT DEFAULT 'th',
                 created_at  INTEGER
             )
             """
@@ -41,6 +43,13 @@ async def init_db():
             )
             """
         )
+        # Safe migrations for databases created before trial/language support.
+        cur = await db.execute("PRAGMA table_info(users)")
+        columns = {row[1] for row in await cur.fetchall()}
+        if "trial_used" not in columns:
+            await db.execute("ALTER TABLE users ADD COLUMN trial_used INTEGER DEFAULT 0")
+        if "language" not in columns:
+            await db.execute("ALTER TABLE users ADD COLUMN language TEXT DEFAULT 'th'")
         await db.commit()
 
 
@@ -51,6 +60,18 @@ async def ensure_user(user_id: int, username: str = ""):
             "INSERT INTO users (user_id, username, created_at) VALUES (?, ?, ?) "
             "ON CONFLICT(user_id) DO UPDATE SET username=excluded.username",
             (user_id, username, now),
+        )
+        await db.commit()
+
+
+async def set_language(user_id: int, language: str):
+    """Persist the user's selected UI language."""
+    if language not in {"th", "en"}:
+        raise ValueError("unsupported language")
+    await ensure_user(user_id)
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE users SET language=? WHERE user_id=?", (language, user_id)
         )
         await db.commit()
 
@@ -180,6 +201,21 @@ async def record_usage(user_id: int):
         )
         await db.execute(
             "UPDATE users SET total_jobs = total_jobs + 1 WHERE user_id=?", (user_id,)
+        )
+        await db.commit()
+
+
+async def record_trial_usage(user_id: int):
+    """Atomically consume one trial item and count it as a completed job."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE users SET trial_used = trial_used + 1, total_jobs = total_jobs + 1 "
+            "WHERE user_id=?",
+            (user_id,),
+        )
+        await db.execute(
+            "INSERT INTO usage (user_id, used_at) VALUES (?, ?)",
+            (user_id, int(time.time())),
         )
         await db.commit()
 

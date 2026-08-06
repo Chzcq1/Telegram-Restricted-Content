@@ -27,14 +27,17 @@ The voucher amount must match a plan price exactly to grant that plan.
 
 ## Bot commands
 
-Customer: `/start`, `/help`, `/myplan`, `/upgrade` (+ inline buttons). Send a
-voucher link to pay, send a Telegram post link to fetch content.
+Customer: `/start`, `/help`, `/myplan`, `/upgrade`, `/id` (+ inline buttons).
+On first use, choose Thai or English, tap **Start fetching**, then paste one
+Telegram post link. Each Telegram account receives two successful trial
+retrievals for its lifetime; paid memberships remain unlimited.
 
 Admin (ID from `ADMIN_ID`):
 - `/login +66xxxxxxxxx` → `/code 12345` → (`/twofa <password>` if 2FA) — logs in
   the owner Telegram account so the bot can access private groups.
 - `/stats` — usage & revenue.
 - `/grant <user_id> <days>` — manually grant a subscription.
+- `/grantme <days>` — grant a test subscription to the admin's own account.
 
 ## Required secrets (Replit Secrets)
 
@@ -62,8 +65,8 @@ suitable — a Telegram bot must run continuously.
 - The bot only fetches content the owner account is genuinely allowed to access;
   it does not bypass Telegram access controls or permissions.
 - Bot API upload limit (~50 MB) applies to files delivered to customers.
+- Trial items are deducted only after the bot successfully delivers content.
 
 ## User Preferences
 
-- ภาษา: ตอบเป็นภาษาไทย ข้อความในบอทเป็นภาษาไทยทั้งหมด
-</content>
+- ภาษา: ผู้ใช้เลือกภาษาไทยหรืออังกฤษในบอทได้

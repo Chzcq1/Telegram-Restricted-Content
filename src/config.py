@@ -27,9 +27,8 @@ PLANS = {
     "p90": {"days": 90, "price": 800, "label": "90 วัน"},
 }
 
-# Free-tier limits (for users without an active subscription).
-FREE_COOLDOWN_SECONDS = 120  # wait time between requests
-FREE_DAILY_LIMIT = 3         # max requests per day
+# One-time trial: non-members may successfully retrieve this many items in total.
+TRIAL_MAX_ITEMS = 2
 
 # TrueMoney gift voucher gateway (from the provided API docs).
 VOUCHER_GATEWAY = "https://gateway.autozy.app/api/giftvoucher"

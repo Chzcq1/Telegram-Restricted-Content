@@ -43,41 +43,77 @@ def _media_size(msg) -> int:
 _pending_plan: dict[int, str] = {}
 
 
-# ── Text (Thai) ──────────────────────────────────────────────────────────────
+# ── Bilingual customer-facing copy ───────────────────────────────────────────
 
-def welcome_text() -> str:
-    return (
-        "🌟 <b>ยินดีต้อนรับสู่บอทดึงเนื้อหา!</b> 🌟\n\n"
-        "🚀 <b>สิ่งที่บอทนี้ทำได้:</b>\n"
-        "🔒 บันทึกโพสต์จากกลุ่ม/แชนแนลที่จำกัดการบันทึก\n"
-        "📥 ดึงเนื้อหาจากแชนแนลสาธารณะเพียงส่งลิงก์โพสต์\n"
-        "✨ เข้าถึงเนื้อหาที่บัญชีระบบมีสิทธิ์เข้าถึงอย่างถูกต้อง\n\n"
-        "💎 <b>สิทธิพิเศษสมาชิก:</b>\n"
-        "🔹 ดึงเนื้อหาแบบไม่จำกัด\n"
-        "🔹 ไม่มีเวลารอ (cooldown)\n"
-        "🔹 ใช้งานได้ต่อเนื่องตลอดอายุสมาชิก\n\n"
-        "🚀 <b>วิธีเริ่มต้น:</b>\n"
-        "✅ ดูคำสั่งทั้งหมดด้วย /help\n"
-        "✅ ตรวจสอบแพ็กเกจของคุณด้วย /myplan\n\n"
-        "เริ่มกันเลย! 😊"
-    )
+COPY = {
+    "th": {
+        "welcome": "👋 <b>ยินดีต้อนรับ!</b>\n\nส่งลิงก์โพสต์ Telegram มาให้บอทเพื่อรับข้อความ รูป หรือวิดีโอ\n\n🎁 <b>เริ่มทดลองฟรีได้ 2 รายการ</b> ต่อ 1 บัญชี\nกด <b>เริ่มดึงเนื้อหา</b> แล้วส่งลิงก์โพสต์ได้เลย",
+        "language": "🌐 <b>เลือกภาษา</b>\nคุณเปลี่ยนภาษาได้ตลอดเวลาจากเมนู",
+        "howto": "📖 <b>วิธีใช้งาน</b>\n\n1️⃣ เปิดโพสต์ Telegram ที่ต้องการ\n2️⃣ กด <b>คัดลอกลิงก์</b> ของโพสต์\n3️⃣ กลับมาที่บอท แล้วกด <b>เริ่มดึงเนื้อหา</b>\n4️⃣ วางและส่งลิงก์\n\nตัวอย่าง:\n<code>https://t.me/channel_name/123</code>\n\n🎁 ทดลองฟรีได้ 2 รายการต่อบัญชี\n💎 เมื่อครบแล้ว เลือกแพ็กเกจเพื่อใช้งานไม่จำกัด\n\n<b>หมายเหตุ:</b> ระบบดึงได้เฉพาะโพสต์ที่บัญชีระบบมีสิทธิ์เข้าถึงเท่านั้น",
+        "ready": "📎 <b>พร้อมแล้ว!</b>\nส่งลิงก์โพสต์ Telegram ที่ต้องการดึงมาได้เลย\n\nตัวอย่าง: <code>https://t.me/channel_name/123</code>",
+        "upgrade": "💎 <b>อัปเกรดเป็นสมาชิก</b>\n\n✅ ดึงเนื้อหาได้ไม่จำกัด\n✅ ไม่มีข้อจำกัดโปรทดลอง\n\nชำระผ่านซองอั่งเปา TrueMoney แล้วเลือกแพ็กเกจด้านล่าง",
+        "start_fetch": "🚀 เริ่มดึงเนื้อหา",
+        "howto_btn": "📖 วิธีใช้งาน",
+        "myplan_btn": "📋 สถานะของฉัน",
+        "upgrade_btn": "💎 อัปเกรด",
+        "language_btn": "🌐 ภาษา / Language",
+        "help_btn": "🎧 ช่วยเหลือ",
+        "trial": "🎁 โปรทดลองคงเหลือ: <b>{remaining}/2</b> รายการ",
+        "member": "✅ <b>สมาชิกใช้งานได้</b>\n{expiry}\nใช้งานสำเร็จ: {jobs} ครั้ง",
+        "nonmember": "📋 <b>สถานะของฉัน</b>\nยังไม่ได้เป็นสมาชิก\n{trial}\n\nกด “เริ่มดึงเนื้อหา” เพื่อใช้สิทธิ์ทดลอง หรืออัปเกรดเพื่อใช้งานไม่จำกัด",
+        "trial_done": "🎉 ดึงสำเร็จแล้ว! เหลือสิทธิ์ทดลอง <b>{remaining}/2</b> รายการ",
+        "trial_finished": "⛔ <b>คุณใช้สิทธิ์ทดลองครบ 2 รายการแล้ว</b>\n\nอัปเกรดเป็นสมาชิกเพื่อดึงเนื้อหาได้ไม่จำกัด",
+        "not_understood": "❓ ไม่พบลิงก์โพสต์ Telegram\nกด “วิธีใช้งาน” เพื่อดูตัวอย่างลิงก์ที่ถูกต้อง",
+        "payment": "💳 คุณเลือกแพ็กเกจ <b>{label} — {price} บาท</b>\n\nส่ง <b>ลิงก์ซองอั่งเปา TrueMoney</b> มูลค่า {price} บาทเข้ามาได้เลย",
+        "fetching": "📥 กำลังดึงเนื้อหา…",
+        "not_ready": "⚠️ ระบบยังไม่พร้อม กรุณาติดต่อแอดมิน",
+        "not_found": "❌ ไม่พบข้อความหรือสื่อในโพสต์นี้",
+        "text_sent": "✅ ส่งข้อความเรียบร้อยแล้ว",
+        "downloading": "⬇️ กำลังดาวน์โหลด…",
+        "download_failed": "❌ ดาวน์โหลดไม่สำเร็จ",
+        "uploading": "⬆️ กำลังส่งไฟล์ ({size})…",
+        "delivered": "✅ ส่งเนื้อหาเรียบร้อย!",
+        "file_failed": "❌ ส่งไฟล์ไม่สำเร็จ: {error}",
+        "too_large": "⚠️ ไฟล์นี้ใหญ่ {size} เกินขีดจำกัดการส่งของบอท ({limit})\nยังไม่รองรับไฟล์ขนาดนี้ กรุณาติดต่อแอดมิน",
+    },
+    "en": {
+        "welcome": "👋 <b>Welcome!</b>\n\nSend a Telegram post link and the bot will return its text, photo, or video.\n\n🎁 <b>Get 2 free trial items</b> per account.\nTap <b>Start fetching</b>, then send a post link.",
+        "language": "🌐 <b>Choose your language</b>\nYou can change it anytime from the menu.",
+        "howto": "📖 <b>How to use</b>\n\n1️⃣ Open the Telegram post you want\n2️⃣ Tap <b>Copy Link</b>\n3️⃣ Return here and tap <b>Start fetching</b>\n4️⃣ Paste and send the link\n\nExample:\n<code>https://t.me/channel_name/123</code>\n\n🎁 You get 2 trial items per account.\n💎 Upgrade after that for unlimited use.\n\n<b>Note:</b> The system can only retrieve posts the owner account is allowed to access.",
+        "ready": "📎 <b>Ready!</b>\nSend the Telegram post link you want to fetch.\n\nExample: <code>https://t.me/channel_name/123</code>",
+        "upgrade": "💎 <b>Upgrade your membership</b>\n\n✅ Unlimited content retrieval\n✅ No trial limit\n\nPay with a TrueMoney gift voucher, then choose a plan below.",
+        "start_fetch": "🚀 Start fetching",
+        "howto_btn": "📖 How to use",
+        "myplan_btn": "📋 My status",
+        "upgrade_btn": "💎 Upgrade",
+        "language_btn": "🌐 Language / ภาษา",
+        "help_btn": "🎧 Help",
+        "trial": "🎁 Trial remaining: <b>{remaining}/2</b> items",
+        "member": "✅ <b>Active member</b>\n{expiry}\nCompleted: {jobs} items",
+        "nonmember": "📋 <b>My status</b>\nNo active membership\n{trial}\n\nTap “Start fetching” to use your trial, or upgrade for unlimited access.",
+        "trial_done": "🎉 Done! You have <b>{remaining}/2</b> trial items left.",
+        "trial_finished": "⛔ <b>You have used all 2 trial items.</b>\n\nUpgrade for unlimited content retrieval.",
+        "not_understood": "❓ I couldn't find a Telegram post link.\nTap “How to use” to see a valid example.",
+        "payment": "💳 You selected <b>{label} — {price} THB</b>\n\nSend a <b>TrueMoney gift voucher link</b> worth {price} THB.",
+        "fetching": "📥 Fetching content…",
+        "not_ready": "⚠️ The system is not ready. Please contact support.",
+        "not_found": "❌ No text or media was found in this post.",
+        "text_sent": "✅ Text delivered.",
+        "downloading": "⬇️ Downloading…",
+        "download_failed": "❌ Download failed.",
+        "uploading": "⬆️ Sending file ({size})…",
+        "delivered": "✅ Content delivered!",
+        "file_failed": "❌ Could not send the file: {error}",
+        "too_large": "⚠️ This file is {size}, above the bot delivery limit ({limit}).\nLarge files are not supported yet. Please contact support.",
+    },
+}
 
 
-def upgrade_text() -> str:
-    lines = [
-        "🌟 <b>ปลดล็อกประสบการณ์พรีเมียม!</b> 🌟\n",
-        "อัปเกรดบัญชีของคุณเพื่อใช้งานแบบไม่จำกัด 🚀\n",
-        "🚀 <b>ฟีเจอร์พรีเมียม:</b>",
-        "✅ ดึงเนื้อหา Telegram แบบไม่จำกัด",
-        "✅ ไม่มีเวลารอ 120 วินาที\n",
-        "💳 <b>ชำระผ่านซองอั่งเปา TrueMoney</b>\n",
-        "🎉 <b>พร้อมอัปเกรดแล้วหรือยัง?</b>",
-        "✨ เลือกแพ็กเกจที่ต้องการด้านล่าง:",
-    ]
-    return "\n".join(lines)
+def tr(lang: str, key: str, **values) -> str:
+    return COPY.get(lang, COPY["th"])[key].format(**values)
 
 
-def plan_keyboard() -> InlineKeyboardMarkup:
+def plan_keyboard(lang: str = "th") -> InlineKeyboardMarkup:
     rows = []
     for key, plan in config.PLANS.items():
         rows.append([
@@ -86,16 +122,26 @@ def plan_keyboard() -> InlineKeyboardMarkup:
                 callback_data=f"buy:{key}",
             )
         ])
-    rows.append([InlineKeyboardButton("🎧 ช่วยเหลือ", url=_support_url())])
+    rows.append([InlineKeyboardButton(tr(lang, "help_btn"), url=_support_url())])
     return InlineKeyboardMarkup(rows)
 
 
-def main_keyboard() -> InlineKeyboardMarkup:
+def main_keyboard(lang: str = "th") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📋 แผนของฉัน", callback_data="myplan")],
-        [InlineKeyboardButton("💎 อัปเกรด", callback_data="upgrade")],
-        [InlineKeyboardButton("🎧 ช่วยเหลือ", url=_support_url())],
+        [InlineKeyboardButton(tr(lang, "start_fetch"), callback_data="fetch")],
+        [InlineKeyboardButton(tr(lang, "howto_btn"), callback_data="howto")],
+        [InlineKeyboardButton(tr(lang, "myplan_btn"), callback_data="myplan")],
+        [InlineKeyboardButton(tr(lang, "upgrade_btn"), callback_data="upgrade")],
+        [InlineKeyboardButton(tr(lang, "language_btn"), callback_data="language")],
+        [InlineKeyboardButton(tr(lang, "help_btn"), url=_support_url())],
     ])
+
+
+def language_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("🇹🇭 ไทย", callback_data="lang:th"),
+        InlineKeyboardButton("🇬🇧 English", callback_data="lang:en"),
+    ]])
 
 
 def _support_url() -> str:
@@ -146,26 +192,24 @@ def build_bot(user_client) -> Client:
         except Exception as e:
             logger.warning(f"notify_admin failed: {e}")
 
+    async def get_lang(uid: int) -> str:
+        user = await db.get_user(uid)
+        return user.get("language", "th") if user else "th"
+
     # ── Commands ────────────────────────────────────────────────────────────
 
     @bot.on_message(filters.command("start") & filters.private)
     async def start_cmd(_, m: Message):
         await db.ensure_user(m.from_user.id, m.from_user.username or "")
+        lang = await get_lang(m.from_user.id)
         await m.reply_text(
-            welcome_text(), reply_markup=main_keyboard(), disable_web_page_preview=True
+            tr(lang, "welcome"), reply_markup=main_keyboard(lang), disable_web_page_preview=True
         )
 
     @bot.on_message(filters.command("help") & filters.private)
     async def help_cmd(_, m: Message):
-        txt = (
-            "📖 <b>คำสั่งที่ใช้ได้:</b>\n\n"
-            "/start — เริ่มต้นใช้งาน\n"
-            "/myplan — ดูสถานะสมาชิก\n"
-            "/upgrade — อัปเกรดสมาชิก\n\n"
-            "💡 เมื่อเป็นสมาชิกแล้ว ส่งลิงก์โพสต์ Telegram เข้ามาได้เลย\n"
-            "ตัวอย่าง: <code>https://t.me/c/123456789/45</code>"
-        )
-        await m.reply_text(txt)
+        lang = await get_lang(m.from_user.id)
+        await m.reply_text(tr(lang, "howto"), reply_markup=main_keyboard(lang))
 
     @bot.on_message(filters.command("myplan") & filters.private)
     async def myplan_cmd(_, m: Message):
@@ -179,19 +223,25 @@ def build_bot(user_client) -> Client:
 
     @bot.on_message(filters.command("upgrade") & filters.private)
     async def upgrade_cmd(_, m: Message):
-        await m.reply_text(upgrade_text(), reply_markup=plan_keyboard())
+        lang = await get_lang(m.from_user.id)
+        await m.reply_text(tr(lang, "upgrade"), reply_markup=plan_keyboard(lang))
 
     async def _send_myplan(uid: int, reply):
         u = await db.get_user(uid)
         active = await db.is_active(uid)
-        status = "✅ ใช้งานได้" if active else "❌ ยังไม่มีสมาชิก"
-        txt = (
-            "📋 <b>แผนของฉัน</b>\n\n"
-            f"สถานะ: {status}\n"
-            f"อายุสมาชิก: {_fmt_expiry(int(u.get('expires_at', 0)) if u else 0)}\n"
-            f"ใช้งานสะสม: {u.get('total_jobs', 0) if u else 0} ครั้ง"
-        )
-        await reply(txt, reply_markup=main_keyboard())
+        lang = u.get("language", "th") if u else "th"
+        trial_used = int(u.get("trial_used", 0)) if u else 0
+        remaining = max(0, config.TRIAL_MAX_ITEMS - trial_used)
+        trial = tr(lang, "trial", remaining=remaining)
+        if active:
+            txt = tr(
+                lang, "member",
+                expiry=_fmt_expiry(int(u.get("expires_at", 0))),
+                jobs=u.get("total_jobs", 0),
+            )
+        else:
+            txt = tr(lang, "nonmember", trial=trial)
+        await reply(txt, reply_markup=main_keyboard(lang))
 
     # ── Admin ─────────────────────────────────────────────────────────────────
 
@@ -325,8 +375,29 @@ def build_bot(user_client) -> Client:
     async def on_cb(_, cq: CallbackQuery):
         data = cq.data or ""
         uid = cq.from_user.id
-        if data == "upgrade":
-            await cq.message.reply_text(upgrade_text(), reply_markup=plan_keyboard())
+        await db.ensure_user(uid, cq.from_user.username or "")
+        lang = await get_lang(uid)
+        if data == "fetch":
+            await cq.message.reply_text(tr(lang, "ready"), reply_markup=main_keyboard(lang))
+            await cq.answer()
+        elif data == "howto":
+            await cq.message.reply_text(tr(lang, "howto"), reply_markup=main_keyboard(lang))
+            await cq.answer()
+        elif data == "language":
+            await cq.message.reply_text(tr(lang, "language"), reply_markup=language_keyboard())
+            await cq.answer()
+        elif data.startswith("lang:"):
+            selected = data.split(":", 1)[1]
+            if selected not in {"th", "en"}:
+                await cq.answer("Invalid language", show_alert=True)
+                return
+            await db.set_language(uid, selected)
+            await cq.message.reply_text(
+                tr(selected, "welcome"), reply_markup=main_keyboard(selected)
+            )
+            await cq.answer("บันทึกแล้ว" if selected == "th" else "Saved")
+        elif data == "upgrade":
+            await cq.message.reply_text(tr(lang, "upgrade"), reply_markup=plan_keyboard(lang))
             await cq.answer()
         elif data == "myplan":
             await _send_myplan(uid, cq.message.reply_text)
@@ -339,10 +410,7 @@ def build_bot(user_client) -> Client:
                 return
             _pending_plan[uid] = f"pay:{key}"
             await cq.message.reply_text(
-                f"💳 คุณเลือกแพ็กเกจ <b>{plan['label']} — {plan['price']} บาท</b>\n\n"
-                "โปรดส่ง <b>ลิงก์ซองอั่งเปา TrueMoney</b> มูลค่าตรงตามราคาแพ็กเกจ\n"
-                "ตัวอย่าง: <code>https://gift.truemoney.com/campaign/?v=xxxxxxxx</code>\n\n"
-                f"⚠️ ยอดในซองต้องเท่ากับ {plan['price']} บาทพอดี"
+                tr(lang, "payment", label=plan["label"], price=plan["price"])
             )
             await cq.answer()
         else:
@@ -351,7 +419,7 @@ def build_bot(user_client) -> Client:
     # ── Free-text: voucher or content link ─────────────────────────────────────
 
     @bot.on_message(filters.private & filters.text & ~filters.command([
-        "start", "help", "myplan", "upgrade", "login", "code", "twofa", "stats", "grant", "grantme",
+        "start", "help", "myplan", "upgrade", "id", "login", "code", "twofa", "stats", "grant", "grantme",
     ]))
     async def on_text(_, m: Message):
         uid = m.from_user.id
@@ -369,13 +437,8 @@ def build_bot(user_client) -> Client:
         try:
             parse_link(text)
         except ValueError:
-            await m.reply_text(
-                "❓ ไม่เข้าใจคำสั่ง\n\n"
-                "• ส่งลิงก์ซองอั่งเปาเพื่อชำระเงิน (กด 💎 อัปเกรด)\n"
-                "• หรือส่งลิงก์โพสต์ Telegram เพื่อดึงเนื้อหา (ต้องเป็นสมาชิก)\n\n"
-                "ดูวิธีใช้ด้วย /help",
-                reply_markup=main_keyboard(),
-            )
+            lang = await get_lang(uid)
+            await m.reply_text(tr(lang, "not_understood"), reply_markup=main_keyboard(lang))
             return
 
         await _handle_content(m, uid, text)
@@ -439,54 +502,53 @@ def build_bot(user_client) -> Client:
 
     async def _handle_content(m: Message, uid: int, link: str):
         active = await db.is_active(uid)
+        user = await db.get_user(uid)
+        lang = user.get("language", "th") if user else "th"
 
         if not active:
-            # Free tier: cooldown + daily limit
-            today = await db.usage_today(uid)
-            if today >= config.FREE_DAILY_LIMIT:
-                await m.reply_text(
-                    f"⛔ โควตาฟรีวันนี้ครบ {config.FREE_DAILY_LIMIT} ครั้งแล้ว\n"
-                    "อัปเกรดเพื่อใช้งานไม่จำกัด 💎",
-                    reply_markup=plan_keyboard(),
-                )
-                return
-            last = await db.last_usage(uid)
-            wait = config.FREE_COOLDOWN_SECONDS - (int(time.time()) - last)
-            if last and wait > 0:
-                await m.reply_text(
-                    f"⏳ โปรดรออีก {wait} วินาที (ผู้ใช้ฟรี)\n"
-                    "อัปเกรดเพื่อไม่มีเวลารอ 💎",
-                    reply_markup=plan_keyboard(),
-                )
+            trial_used = int(user.get("trial_used", 0)) if user else 0
+            if trial_used >= config.TRIAL_MAX_ITEMS:
+                await m.reply_text(tr(lang, "trial_finished"), reply_markup=plan_keyboard(lang))
                 return
 
         if not user_client.is_authorized:
-            await m.reply_text("⚠️ ระบบยังไม่พร้อม (บัญชีเจ้าของยังไม่ได้ล็อกอิน) กรุณาติดต่อแอดมิน")
+            await m.reply_text(tr(lang, "not_ready"))
             await notify_admin("⚠️ มีผู้ใช้ส่งลิงก์แต่บัญชีเจ้าของยังไม่ได้ล็อกอิน (/login)")
             return
 
-        status = await m.reply_text("📥 กำลังดึงเนื้อหา…")
+        status = await m.reply_text(tr(lang, "fetching"))
         try:
-            delivered = await _fetch_and_deliver(m, uid, link, status)
+            delivered = await _fetch_and_deliver(m, uid, link, status, lang)
             if delivered:
-                await db.record_usage(uid)
+                if active:
+                    await db.record_usage(uid)
+                else:
+                    await db.record_trial_usage(uid)
+                    fresh = await db.get_user(uid)
+                    remaining = max(0, config.TRIAL_MAX_ITEMS - int(fresh.get("trial_used", 0)))
+                    await m.reply_text(
+                        tr(lang, "trial_done", remaining=remaining),
+                        reply_markup=main_keyboard(lang) if remaining else plan_keyboard(lang),
+                    )
         except Exception as e:
             logger.exception("fetch failed")
             await status.edit_text(f"❌ ดึงเนื้อหาไม่สำเร็จ: {e}")
 
-    async def _fetch_and_deliver(m: Message, uid: int, link: str, status) -> bool:
+    async def _fetch_and_deliver(
+        m: Message, uid: int, link: str, status, lang: str
+    ) -> bool:
         """Fetch content and deliver via the bot. Returns True only if the
         customer actually received content (so usage is counted only then)."""
         chat_id, msg_id = parse_link(link)
         msg = await user_client.client.get_messages(chat_id, msg_id)
         if not msg or (not msg.media and not (msg.text and msg.text.strip())):
-            await status.edit_text("❌ ไม่พบสื่อในโพสต์นี้")
+            await status.edit_text(tr(lang, "not_found"))
             return False
 
         # Text-only
         if not msg.media and msg.text:
             await bot.send_message(uid, msg.text)
-            await status.edit_text("✅ ส่งข้อความแล้ว")
+            await status.edit_text(tr(lang, "text_sent"))
             return True
 
         # Enforce Bot API delivery cap BEFORE downloading, so paid users aren't
@@ -494,27 +556,28 @@ def build_bot(user_client) -> Client:
         size = _media_size(msg)
         if size > MAX_DELIVERY_BYTES:
             await status.edit_text(
-                f"⚠️ ไฟล์นี้ใหญ่ {_fmt_size(size)} เกินขีดจำกัดการส่งของบอท "
-                f"({_fmt_size(MAX_DELIVERY_BYTES)})\n"
-                "ยังไม่รองรับไฟล์ขนาดนี้ กรุณาติดต่อแอดมิน"
+                tr(
+                    lang, "too_large",
+                    size=_fmt_size(size), limit=_fmt_size(MAX_DELIVERY_BYTES),
+                )
             )
             return False
 
-        await status.edit_text("⬇️ กำลังดาวน์โหลด…")
+        await status.edit_text(tr(lang, "downloading"))
 
         def progress(cur, tot):
             pass
 
         raw = await user_client.client.download_media(msg, in_memory=True, progress=progress)
         if not raw:
-            await status.edit_text("❌ ดาวน์โหลดไม่สำเร็จ")
+            await status.edit_text(tr(lang, "download_failed"))
             return False
 
         data = bytes(raw.getvalue()) if hasattr(raw, "getvalue") else bytes(raw)
         fname = getattr(raw, "name", f"file_{msg_id}")
         caption = getattr(msg, "caption", "") or ""
 
-        await status.edit_text(f"⬆️ กำลังส่งไฟล์ ({_fmt_size(len(data))})…")
+        await status.edit_text(tr(lang, "uploading", size=_fmt_size(len(data))))
 
         # Deliver through the bot so it reliably reaches the customer.
         forwarder = BotForwarder(config.BOT_TOKEN, str(uid))
@@ -537,9 +600,9 @@ def build_bot(user_client) -> Client:
 
         ok, err = await asyncio.to_thread(_send_blocking)
         if ok:
-            await status.edit_text("✅ ส่งเนื้อหาเรียบร้อย!")
+            await status.edit_text(tr(lang, "delivered"))
             return True
-        await status.edit_text(f"❌ ส่งไฟล์ไม่สำเร็จ: {err}")
+        await status.edit_text(tr(lang, "file_failed", error=err))
         return False
 
     return bot
