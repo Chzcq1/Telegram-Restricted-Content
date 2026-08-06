@@ -52,7 +52,7 @@ COPY = {
         "language": "🌐 <b>เลือกภาษา</b>\nคุณเปลี่ยนภาษาได้ตลอดเวลาจากเมนู",
         "howto": "📖 <b>วิธีใช้งาน</b>\n\n<b>ก่อนเริ่ม:</b> แอดมินต้องล็อกอินบัญชี Telegram เจ้าของเข้าระบบก่อน บัญชีนี้ต้องเป็นสมาชิกกลุ่ม/แชนแนลต้นทางและมีสิทธิ์เห็นโพสต์นั้น\n\n1️⃣ เปิดโพสต์ Telegram ที่ต้องการ\n2️⃣ กด <b>คัดลอกลิงก์</b> ของโพสต์\n3️⃣ กลับมาที่บอท แล้วกด <b>เริ่มดึงเนื้อหา</b>\n4️⃣ วางและส่งลิงก์\n\nตัวอย่าง:\n<code>https://t.me/channel_name/123</code>\n\n🎁 ทดลองฟรีได้ 2 รายการต่อบัญชี\n💎 เมื่อครบแล้ว เลือกแพ็กเกจเพื่อใช้งานไม่จำกัด\n\n<b>สำคัญ:</b> ลูกค้าไม่ต้องล็อกอินเอง แต่บัญชีเจ้าของของระบบต้องอยู่ในกลุ่ม/แชนแนลนั้นจริง หากบัญชีนี้เข้าไม่ถึงโพสต์ ระบบจะดึงไม่ได้",
         "ready": "📎 <b>พร้อมแล้ว!</b>\nบัญชีเจ้าของระบบล็อกอินแล้ว\n\nส่งลิงก์โพสต์ Telegram ที่ต้องการดึงมาได้เลย\n\nตัวอย่าง: <code>https://t.me/channel_name/123</code>\n\n⚠️ ตรวจสอบว่าบัญชีเจ้าของระบบเป็นสมาชิกกลุ่ม/แชนแนลต้นทางแล้ว",
-        "login_required": "🔐 <b>ยังเริ่มดึงไม่ได้</b>\n\nแอดมินต้องล็อกอินบัญชี Telegram เจ้าของระบบก่อน 1 ครั้ง โดยส่งคำสั่งในแชตส่วนตัวกับบอท:\n\n<code>/login +668xxxxxxxx</code>\n<code>/code 12345</code>\n<code>/twofa รหัสผ่าน</code> (ถ้ามี 2FA)\n\nหลังล็อกอินแล้ว บัญชีเจ้าของระบบต้องเป็นสมาชิกกลุ่ม/แชนแนลต้นทางที่ต้องการดึงด้วย\n\nลูกค้าไม่ต้องล็อกอินเอง เมื่อพร้อมแล้วกด “เริ่มดึงเนื้อหา” อีกครั้ง",
+        "login_required": "🔐 <b>ยังเริ่มดึงไม่ได้</b>\n\nแอดมินต้องล็อกอินบัญชี Telegram เจ้าของระบบก่อน 1 ครั้ง โดยส่งคำสั่งในแชตส่วนตัวกับบอท:\n\n<code>/login +668xxxxxxxx</code>\n<code>/code 1 2 3 4 5</code> (เว้นวรรคทีละตัว กัน Telegram บล็อก)\n<code>/twofa รหัสผ่าน</code> (ถ้ามี 2FA)\n\nหลังล็อกอินแล้ว บัญชีเจ้าของระบบต้องเป็นสมาชิกกลุ่ม/แชนแนลต้นทางที่ต้องการดึงด้วย\n\nลูกค้าไม่ต้องล็อกอินเอง เมื่อพร้อมแล้วกด “เริ่มดึงเนื้อหา” อีกครั้ง",
         "access_rule": "📌 <b>เงื่อนไขการดึงเนื้อหา</b>\n\nบัญชี Telegram เจ้าของระบบต้องอยู่ในกลุ่มหรือแชนแนลต้นทาง และต้องเปิดดูโพสต์นั้นได้จริง\n\nลูกค้าเพียงส่งลิงก์โพสต์ ไม่ต้องล็อกอินบัญชีของตัวเอง\n\nหากบัญชีเจ้าของไม่ได้อยู่ในกลุ่ม/แชนแนล หรือโพสต์ถูกลบ/ไม่มีสิทธิ์ ระบบจะดึงไม่ได้",
         "upgrade": "💎 <b>อัปเกรดเป็นสมาชิก</b>\n\n✅ ดึงเนื้อหาได้ไม่จำกัด\n✅ ไม่มีข้อจำกัดโปรทดลอง\n\nชำระผ่านซองอั่งเปา TrueMoney แล้วเลือกแพ็กเกจด้านล่าง",
         "start_fetch": "🚀 เริ่มดึงเนื้อหา",
@@ -85,7 +85,7 @@ COPY = {
         "language": "🌐 <b>Choose your language</b>\nYou can change it anytime from the menu.",
         "howto": "📖 <b>How to use</b>\n\n<b>Before you start:</b> An admin must log in the owner Telegram account first. That account must be a member of the source group/channel and be able to view the post.\n\n1️⃣ Open the Telegram post you want\n2️⃣ Tap <b>Copy Link</b>\n3️⃣ Return here and tap <b>Start fetching</b>\n4️⃣ Paste and send the link\n\nExample:\n<code>https://t.me/channel_name/123</code>\n\n🎁 You get 2 trial items per account.\n💎 Upgrade after that for unlimited use.\n\n<b>Important:</b> Customers do not need to log in. The system owner account must genuinely belong to the source group/channel; otherwise the post cannot be fetched.",
         "ready": "📎 <b>Ready!</b>\nThe owner account is logged in.\n\nSend the Telegram post link you want to fetch.\n\nExample: <code>https://t.me/channel_name/123</code>\n\n⚠️ Make sure the owner account is a member of the source group/channel.",
-        "login_required": "🔐 <b>Fetching is not ready</b>\n\nAn admin must log in the owner Telegram account once from the private bot chat:\n\n<code>/login +668xxxxxxxx</code>\n<code>/code 12345</code>\n<code>/twofa password</code> (if 2FA is enabled)\n\nThe owner account must also be a member of the source group/channel.\n\nCustomers do not need to log in. Tap “Start fetching” again after setup.",
+        "login_required": "🔐 <b>Fetching is not ready</b>\n\nAn admin must log in the owner Telegram account once from the private bot chat:\n\n<code>/login +668xxxxxxxx</code>\n<code>/code 1 2 3 4 5</code> (space out digits so Telegram doesn't block the login)\n<code>/twofa password</code> (if 2FA is enabled)\n\nThe owner account must also be a member of the source group/channel.\n\nCustomers do not need to log in. Tap “Start fetching” again after setup.",
         "access_rule": "📌 <b>Content access rules</b>\n\nThe owner Telegram account must be a member of the source group or channel and must be able to open the post.\n\nCustomers only send the post link and do not need to log in.\n\nIf the owner account is not a member, or the post was deleted or restricted, it cannot be fetched.",
         "upgrade": "💎 <b>Upgrade your membership</b>\n\n✅ Unlimited content retrieval\n✅ No trial limit\n\nPay with a TrueMoney gift voucher, then choose a plan below.",
         "start_fetch": "🚀 Start fetching",
@@ -297,7 +297,14 @@ def build_bot(user_client) -> Client:
         res = await user_client.send_code(phone)
         if res.get("ok"):
             _pending_plan[m.from_user.id] = f"login:{phone}"
-            await m.reply_text("📲 ส่งรหัสไปที่ Telegram แล้ว — ใช้ /code <รหัส>")
+            await m.reply_text(
+                "📲 ส่งรหัสไปที่แอป Telegram ของบัญชีนั้นแล้ว\n\n"
+                "⚠️ <b>สำคัญมาก:</b> ห้ามพิมพ์รหัสติดกันตรง ๆ เช่น <code>/code 12345</code>\n"
+                "Telegram จะบล็อกการล็อกอินทันที (มองว่าแชร์รหัส)\n\n"
+                "✅ ให้พิมพ์แบบ <b>เว้นวรรคทีละตัว</b> แทน ตัวอย่าง:\n"
+                "<code>/code 1 2 3 4 5</code>\n"
+                "หรือคั่นด้วยขีด: <code>/code 1-2-3-4-5</code>"
+            )
         else:
             error = res.get("error", "")
             if "PHONE_NUMBER_INVALID" in error:
@@ -320,16 +327,31 @@ def build_bot(user_client) -> Client:
         phone = pending.split(":", 1)[1]
         parts = m.text.split(maxsplit=1)
         if len(parts) < 2:
-            await m.reply_text("ใช้: <code>/code 12345</code>")
+            await m.reply_text("ใช้: <code>/code 1 2 3 4 5</code> (เว้นวรรคทีละตัว)")
             return
-        res = await user_client.sign_in(phone, parts[1].strip())
+        # รับได้ทุกรูปแบบ: "1 2 3 4 5", "1-2-3-4-5", "12345" — ดึงเฉพาะตัวเลข
+        code = "".join(ch for ch in parts[1] if ch.isdigit())
+        if not code:
+            await m.reply_text("ใช้: <code>/code 1 2 3 4 5</code> (เว้นวรรคทีละตัว)")
+            return
+        res = await user_client.sign_in(phone, code)
         if res.get("ok"):
             _pending_plan.pop(m.from_user.id, None)
             await m.reply_text("✅ ล็อกอินบัญชีเจ้าของสำเร็จ! บอทพร้อมดึงเนื้อหาแล้ว")
         elif res.get("need_2fa"):
             await m.reply_text("🔐 บัญชีเปิด 2FA — ใช้ <code>/twofa รหัสผ่าน</code>")
         else:
-            await m.reply_text(f"❌ {res.get('error')}")
+            err = str(res.get("error", ""))
+            if "confirmed via" in err or "PHONE_CODE" in err.upper() or "declined" in err.lower():
+                await m.reply_text(
+                    "❌ Telegram บล็อกรหัสนี้แล้ว (ถูกมองว่าแชร์รหัสในแชต)\n\n"
+                    "วิธีแก้:\n"
+                    "1) ขอรหัสใหม่ด้วย /login +เบอร์ อีกครั้ง\n"
+                    "2) พิมพ์รหัสแบบ<b>เว้นวรรคทีละตัว</b>: <code>/code 1 2 3 4 5</code>\n"
+                    "3) ถ้ายังไม่ได้ ให้ล็อกอินผ่านหน้าเว็บแอดมินแทน (ปลอดภัยกว่า)"
+                )
+            else:
+                await m.reply_text(f"❌ {err}")
 
     @bot.on_message(filters.command("twofa") & filters.private)
     async def twofa_cmd(_, m: Message):
