@@ -5,3 +5,6 @@ __pycache__/
 *.session
 downloads/
 .pythonlibs/
+data.db
+*.session
+*.session-journal

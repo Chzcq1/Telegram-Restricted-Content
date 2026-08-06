@@ -1,0 +1,2 @@
+- [Telegram bot stack](telegram-bot-stack.md) — Pyrogram user+bot clients share one asyncio loop; `pyrogram` module is provided by the `pyrotgfork` fork, not a `pyrogram` pip package.
+- [TrueMoney voucher payments](truemoney-payments.md) — subscriptions granted by exact voucher amount via a third-party angpao gateway; codes are single-use, de-duped in SQLite.
