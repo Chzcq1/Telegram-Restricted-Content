@@ -1142,8 +1142,13 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
         return asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=timeout)
 
     @app.route("/")
-    @login_required
     def index():
+        # Browsers can't send the X-Auth-Token header on a normal page load,
+        # so redirect to the login page instead of returning a bare 401 JSON.
+        # The page itself contains no secrets; all data APIs stay token-guarded
+        # and the page's own JS redirects to /login when the token is invalid.
+        if not WEB_PASSWORD:
+            return redirect(url_for("login"))
         return render_template_string(INDEX_HTML, phone=PHONE_NUMBER)
 
     # ── Auth ──────────────────────────────────────────────────────────────────
