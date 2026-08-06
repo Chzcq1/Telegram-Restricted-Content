@@ -371,6 +371,19 @@ INDEX_HTML = r"""<!DOCTYPE html>
     <span style="color:#fca5a5">รับค่าได้จาก <a href="https://my.telegram.org/auth" target="_blank" style="color:#f87171;text-decoration:underline">my.telegram.org/auth</a></span>
   </div>
 
+  <!-- Usage guide -->
+  <details class="card p-4" open>
+    <summary class="section-label" style="cursor:pointer;margin-bottom:0">📖 วิธีใช้งาน / How to use</summary>
+    <div class="mt-3 text-xs" style="color:var(--muted);line-height:1.8">
+      <p><strong style="color:var(--text)">ดึง 1 โพสต์:</strong> ล็อกอิน Telegram → เลือกวิธีส่ง → ใส่ลิงก์ → กด Download Range</p>
+      <p><strong style="color:var(--text)">ดึงหลายโพสต์ต่อเนื่อง:</strong> ใส่ลิงก์โพสต์แรก แล้วตั้งค่า <b>Message count</b> เป็นจำนวนที่ต้องการ เช่น 20 จากนั้นกด Download Range</p>
+      <p><strong style="color:var(--text)">เลือกเฉพาะบางโพสต์:</strong> กด Scan &amp; Preview → เลือกรายการหรือ Select All → กด Download Selected</p>
+      <p><strong style="color:var(--text)">ดึงเป็นช่วงจากลิงก์:</strong> ใช้รูปแบบ <code style="background:var(--surface);padding:2px 5px;border-radius:4px">https://t.me/channel/100-120</code> แล้วระบบจะดึงโพสต์ 100–120 ต่อเนื่อง</p>
+      <p><strong style="color:var(--text)">ดึงทั้ง Topic:</strong> ใช้ส่วน Clone Topic แล้วใส่ลิงก์ข้อความแรกและปลายทาง</p>
+      <p style="color:var(--amber)">หมายเหตุ: ระบบทำทีละงาน ต้องรอ progress งานปัจจุบันเสร็จก่อนเริ่มงานถัดไป</p>
+    </div>
+  </details>
+
   <!-- Telegram login card -->
   <div id="auth-card" class="card p-5 hidden">
     <div class="flex items-start justify-between gap-4 mb-4">
