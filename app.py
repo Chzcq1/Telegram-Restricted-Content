@@ -101,25 +101,16 @@ async def main():
     await db.init_db()
 
     tg_client = UserClient()
-    logger.info("Connecting owner Telegram account…")
-    try:
-        await tg_client.connect()
-    except AttributeError as e:
-        logger.error(f"Telegram credentials missing: {e}")
-        logger.error("Please set API_ID and API_HASH environment variables.")
-    except Exception as e:
-        logger.error(f"Failed to connect owner account: {e}")
-
-    if tg_client.is_authorized:
-        me = await tg_client.get_me()
-        logger.info(f"Owner logged in as: {me.get('name')} ({me.get('phone')})")
-    else:
-        logger.info("Owner account not authenticated — admin can use /login in the bot.")
-
     loop = asyncio.get_running_loop()
 
-    # ── Flask admin web UI (kept for the admin's own use) ──
-    # Never expose this powerful UI without a configured password.
+    # ── Flask admin web UI ──
+    # Start this FIRST and immediately, before touching Telegram at all.
+    # Deployment healthchecks probe the port right away; if we make them wait
+    # on Telegram DC handshakes (which can take many seconds, or hang if
+    # Telegram is briefly unreachable), the platform sees the port as never
+    # opened, decides the app is unhealthy, and kills/restarts it — which
+    # restarts the slow Telegram handshake too, producing an endless
+    # crash-restart loop and a bot that never becomes responsive.
     if os.environ.get("WEB_PASSWORD"):
         flask_app = create_app(tg_client, loop)
         flask_thread = threading.Thread(
@@ -136,6 +127,21 @@ async def main():
             "WEB_PASSWORD is not configured — admin web UI is disabled."
         )
 
+    logger.info("Connecting owner Telegram account…")
+    try:
+        await tg_client.connect()
+    except AttributeError as e:
+        logger.error(f"Telegram credentials missing: {e}")
+        logger.error("Please set API_ID and API_HASH environment variables.")
+    except BaseException as e:
+        logger.error(f"Failed to connect owner account: {e}")
+
+    if tg_client.is_authorized:
+        me = await tg_client.get_me()
+        logger.info(f"Owner logged in as: {me.get('name')} ({me.get('phone')})")
+    else:
+        logger.info("Owner account not authenticated — admin can use /login in the bot.")
+
     # ── Telegram subscription bot ──
     if config.BOT_TOKEN and config.API_ID and config.API_HASH:
         bot = build_bot(tg_client)
@@ -143,7 +149,7 @@ async def main():
             await bot.start()
             me = await bot.get_me()
             logger.info(f"Bot started as @{me.username}")
-        except Exception as e:
+        except BaseException as e:
             logger.error(f"Bot failed to start: {e}. Wiping bot session and retrying in 10s…")
             # A bad/duplicated session is the usual culprit — remove it so
             # Pyrogram re-authenticates cleanly from BOT_TOKEN.
@@ -160,7 +166,7 @@ async def main():
                 await bot.start()
                 me = await bot.get_me()
                 logger.info(f"Bot started (retry) as @{me.username}")
-            except Exception as e2:
+            except BaseException as e2:
                 logger.error(f"Bot still failed after retry: {e2}. Running without bot.")
     else:
         logger.error("BOT_TOKEN / API_ID / API_HASH missing — bot not started.")
