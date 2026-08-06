@@ -49,8 +49,10 @@ COPY = {
     "th": {
         "welcome": "👋 <b>ยินดีต้อนรับ!</b>\n\nส่งลิงก์โพสต์ Telegram มาให้บอทเพื่อรับข้อความ รูป หรือวิดีโอ\n\n🎁 <b>เริ่มทดลองฟรีได้ 2 รายการ</b> ต่อ 1 บัญชี\nกด <b>เริ่มดึงเนื้อหา</b> แล้วส่งลิงก์โพสต์ได้เลย",
         "language": "🌐 <b>เลือกภาษา</b>\nคุณเปลี่ยนภาษาได้ตลอดเวลาจากเมนู",
-        "howto": "📖 <b>วิธีใช้งาน</b>\n\n1️⃣ เปิดโพสต์ Telegram ที่ต้องการ\n2️⃣ กด <b>คัดลอกลิงก์</b> ของโพสต์\n3️⃣ กลับมาที่บอท แล้วกด <b>เริ่มดึงเนื้อหา</b>\n4️⃣ วางและส่งลิงก์\n\nตัวอย่าง:\n<code>https://t.me/channel_name/123</code>\n\n🎁 ทดลองฟรีได้ 2 รายการต่อบัญชี\n💎 เมื่อครบแล้ว เลือกแพ็กเกจเพื่อใช้งานไม่จำกัด\n\n<b>หมายเหตุ:</b> ระบบดึงได้เฉพาะโพสต์ที่บัญชีระบบมีสิทธิ์เข้าถึงเท่านั้น",
-        "ready": "📎 <b>พร้อมแล้ว!</b>\nส่งลิงก์โพสต์ Telegram ที่ต้องการดึงมาได้เลย\n\nตัวอย่าง: <code>https://t.me/channel_name/123</code>",
+        "howto": "📖 <b>วิธีใช้งาน</b>\n\n<b>ก่อนเริ่ม:</b> แอดมินต้องล็อกอินบัญชี Telegram เจ้าของเข้าระบบก่อน บัญชีนี้ต้องเป็นสมาชิกกลุ่ม/แชนแนลต้นทางและมีสิทธิ์เห็นโพสต์นั้น\n\n1️⃣ เปิดโพสต์ Telegram ที่ต้องการ\n2️⃣ กด <b>คัดลอกลิงก์</b> ของโพสต์\n3️⃣ กลับมาที่บอท แล้วกด <b>เริ่มดึงเนื้อหา</b>\n4️⃣ วางและส่งลิงก์\n\nตัวอย่าง:\n<code>https://t.me/channel_name/123</code>\n\n🎁 ทดลองฟรีได้ 2 รายการต่อบัญชี\n💎 เมื่อครบแล้ว เลือกแพ็กเกจเพื่อใช้งานไม่จำกัด\n\n<b>สำคัญ:</b> ลูกค้าไม่ต้องล็อกอินเอง แต่บัญชีเจ้าของของระบบต้องอยู่ในกลุ่ม/แชนแนลนั้นจริง หากบัญชีนี้เข้าไม่ถึงโพสต์ ระบบจะดึงไม่ได้",
+        "ready": "📎 <b>พร้อมแล้ว!</b>\nบัญชีเจ้าของระบบล็อกอินแล้ว\n\nส่งลิงก์โพสต์ Telegram ที่ต้องการดึงมาได้เลย\n\nตัวอย่าง: <code>https://t.me/channel_name/123</code>\n\n⚠️ ตรวจสอบว่าบัญชีเจ้าของระบบเป็นสมาชิกกลุ่ม/แชนแนลต้นทางแล้ว",
+        "login_required": "🔐 <b>ยังเริ่มดึงไม่ได้</b>\n\nแอดมินต้องล็อกอินบัญชี Telegram เจ้าของระบบก่อน 1 ครั้ง โดยส่งคำสั่งในแชตส่วนตัวกับบอท:\n\n<code>/login +668xxxxxxxx</code>\n<code>/code 12345</code>\n<code>/twofa รหัสผ่าน</code> (ถ้ามี 2FA)\n\nหลังล็อกอินแล้ว บัญชีเจ้าของระบบต้องเป็นสมาชิกกลุ่ม/แชนแนลต้นทางที่ต้องการดึงด้วย\n\nลูกค้าไม่ต้องล็อกอินเอง เมื่อพร้อมแล้วกด “เริ่มดึงเนื้อหา” อีกครั้ง",
+        "access_rule": "📌 <b>เงื่อนไขการดึงเนื้อหา</b>\n\nบัญชี Telegram เจ้าของระบบต้องอยู่ในกลุ่มหรือแชนแนลต้นทาง และต้องเปิดดูโพสต์นั้นได้จริง\n\nลูกค้าเพียงส่งลิงก์โพสต์ ไม่ต้องล็อกอินบัญชีของตัวเอง\n\nหากบัญชีเจ้าของไม่ได้อยู่ในกลุ่ม/แชนแนล หรือโพสต์ถูกลบ/ไม่มีสิทธิ์ ระบบจะดึงไม่ได้",
         "upgrade": "💎 <b>อัปเกรดเป็นสมาชิก</b>\n\n✅ ดึงเนื้อหาได้ไม่จำกัด\n✅ ไม่มีข้อจำกัดโปรทดลอง\n\nชำระผ่านซองอั่งเปา TrueMoney แล้วเลือกแพ็กเกจด้านล่าง",
         "start_fetch": "🚀 เริ่มดึงเนื้อหา",
         "howto_btn": "📖 วิธีใช้งาน",
@@ -66,7 +68,8 @@ COPY = {
         "not_understood": "❓ ไม่พบลิงก์โพสต์ Telegram\nกด “วิธีใช้งาน” เพื่อดูตัวอย่างลิงก์ที่ถูกต้อง",
         "payment": "💳 คุณเลือกแพ็กเกจ <b>{label} — {price} บาท</b>\n\nส่ง <b>ลิงก์ซองอั่งเปา TrueMoney</b> มูลค่า {price} บาทเข้ามาได้เลย",
         "fetching": "📥 กำลังดึงเนื้อหา…",
-        "not_ready": "⚠️ ระบบยังไม่พร้อม กรุณาติดต่อแอดมิน",
+        "not_ready": "🔐 บัญชีเจ้าของระบบยังไม่ได้ล็อกอิน\nแอดมินต้องใช้ /login, /code และ /twofa (ถ้ามี) ก่อนเริ่มดึงเนื้อหา",
+        "access_denied": "⚠️ บัญชีเจ้าของระบบเข้าไม่ถึงโพสต์นี้\n\nตรวจสอบว่าบัญชีเจ้าของเป็นสมาชิกกลุ่ม/แชนแนลต้นทาง และยังเปิดดูโพสต์นี้ได้ จากนั้นลองส่งลิงก์ใหม่",
         "not_found": "❌ ไม่พบข้อความหรือสื่อในโพสต์นี้",
         "text_sent": "✅ ส่งข้อความเรียบร้อยแล้ว",
         "downloading": "⬇️ กำลังดาวน์โหลด…",
@@ -79,8 +82,10 @@ COPY = {
     "en": {
         "welcome": "👋 <b>Welcome!</b>\n\nSend a Telegram post link and the bot will return its text, photo, or video.\n\n🎁 <b>Get 2 free trial items</b> per account.\nTap <b>Start fetching</b>, then send a post link.",
         "language": "🌐 <b>Choose your language</b>\nYou can change it anytime from the menu.",
-        "howto": "📖 <b>How to use</b>\n\n1️⃣ Open the Telegram post you want\n2️⃣ Tap <b>Copy Link</b>\n3️⃣ Return here and tap <b>Start fetching</b>\n4️⃣ Paste and send the link\n\nExample:\n<code>https://t.me/channel_name/123</code>\n\n🎁 You get 2 trial items per account.\n💎 Upgrade after that for unlimited use.\n\n<b>Note:</b> The system can only retrieve posts the owner account is allowed to access.",
-        "ready": "📎 <b>Ready!</b>\nSend the Telegram post link you want to fetch.\n\nExample: <code>https://t.me/channel_name/123</code>",
+        "howto": "📖 <b>How to use</b>\n\n<b>Before you start:</b> An admin must log in the owner Telegram account first. That account must be a member of the source group/channel and be able to view the post.\n\n1️⃣ Open the Telegram post you want\n2️⃣ Tap <b>Copy Link</b>\n3️⃣ Return here and tap <b>Start fetching</b>\n4️⃣ Paste and send the link\n\nExample:\n<code>https://t.me/channel_name/123</code>\n\n🎁 You get 2 trial items per account.\n💎 Upgrade after that for unlimited use.\n\n<b>Important:</b> Customers do not need to log in. The system owner account must genuinely belong to the source group/channel; otherwise the post cannot be fetched.",
+        "ready": "📎 <b>Ready!</b>\nThe owner account is logged in.\n\nSend the Telegram post link you want to fetch.\n\nExample: <code>https://t.me/channel_name/123</code>\n\n⚠️ Make sure the owner account is a member of the source group/channel.",
+        "login_required": "🔐 <b>Fetching is not ready</b>\n\nAn admin must log in the owner Telegram account once from the private bot chat:\n\n<code>/login +668xxxxxxxx</code>\n<code>/code 12345</code>\n<code>/twofa password</code> (if 2FA is enabled)\n\nThe owner account must also be a member of the source group/channel.\n\nCustomers do not need to log in. Tap “Start fetching” again after setup.",
+        "access_rule": "📌 <b>Content access rules</b>\n\nThe owner Telegram account must be a member of the source group or channel and must be able to open the post.\n\nCustomers only send the post link and do not need to log in.\n\nIf the owner account is not a member, or the post was deleted or restricted, it cannot be fetched.",
         "upgrade": "💎 <b>Upgrade your membership</b>\n\n✅ Unlimited content retrieval\n✅ No trial limit\n\nPay with a TrueMoney gift voucher, then choose a plan below.",
         "start_fetch": "🚀 Start fetching",
         "howto_btn": "📖 How to use",
@@ -96,7 +101,8 @@ COPY = {
         "not_understood": "❓ I couldn't find a Telegram post link.\nTap “How to use” to see a valid example.",
         "payment": "💳 You selected <b>{label} — {price} THB</b>\n\nSend a <b>TrueMoney gift voucher link</b> worth {price} THB.",
         "fetching": "📥 Fetching content…",
-        "not_ready": "⚠️ The system is not ready. Please contact support.",
+        "not_ready": "🔐 The owner account is not logged in yet.\nAn admin must complete /login, /code, and /twofa (if enabled) before fetching.",
+        "access_denied": "⚠️ The owner account cannot access this post.\n\nMake sure it is a member of the source group/channel and can still open the post, then try again.",
         "not_found": "❌ No text or media was found in this post.",
         "text_sent": "✅ Text delivered.",
         "downloading": "⬇️ Downloading…",
@@ -130,6 +136,7 @@ def main_keyboard(lang: str = "th") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(tr(lang, "start_fetch"), callback_data="fetch")],
         [InlineKeyboardButton(tr(lang, "howto_btn"), callback_data="howto")],
+        [InlineKeyboardButton("📌 เงื่อนไขการดึง" if lang == "th" else "📌 Access rules", callback_data="rules")],
         [InlineKeyboardButton(tr(lang, "myplan_btn"), callback_data="myplan")],
         [InlineKeyboardButton(tr(lang, "upgrade_btn"), callback_data="upgrade")],
         [InlineKeyboardButton(tr(lang, "language_btn"), callback_data="language")],
@@ -378,10 +385,18 @@ def build_bot(user_client) -> Client:
         await db.ensure_user(uid, cq.from_user.username or "")
         lang = await get_lang(uid)
         if data == "fetch":
-            await cq.message.reply_text(tr(lang, "ready"), reply_markup=main_keyboard(lang))
+            if user_client.is_authorized:
+                await cq.message.reply_text(tr(lang, "ready"), reply_markup=main_keyboard(lang))
+            else:
+                await cq.message.reply_text(
+                    tr(lang, "login_required"), reply_markup=main_keyboard(lang)
+                )
             await cq.answer()
         elif data == "howto":
             await cq.message.reply_text(tr(lang, "howto"), reply_markup=main_keyboard(lang))
+            await cq.answer()
+        elif data == "rules":
+            await cq.message.reply_text(tr(lang, "access_rule"), reply_markup=main_keyboard(lang))
             await cq.answer()
         elif data == "language":
             await cq.message.reply_text(tr(lang, "language"), reply_markup=language_keyboard())
@@ -532,7 +547,9 @@ def build_bot(user_client) -> Client:
                     )
         except Exception as e:
             logger.exception("fetch failed")
-            await status.edit_text(f"❌ ดึงเนื้อหาไม่สำเร็จ: {e}")
+            # In most live failures Telegram raises an access/peer error. Show an
+            # actionable customer message and keep detailed diagnostics in logs.
+            await status.edit_text(tr(lang, "access_denied"))
 
     async def _fetch_and_deliver(
         m: Message, uid: int, link: str, status, lang: str
