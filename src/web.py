@@ -1097,6 +1097,11 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
 
         return decorated
 
+    @app.route("/health")
+    def health():
+        """Deployment healthcheck — always returns 200 so the VM is not restarted."""
+        return jsonify({"ok": True}), 200
+
     @app.route("/login", methods=["GET", "POST"])
     def login():
         return render_template_string(LOGIN_HTML)

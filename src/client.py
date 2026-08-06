@@ -19,6 +19,7 @@ class UserClient:
                 api_id=API_ID,
                 api_hash=API_HASH,
                 no_updates=True,
+                workdir="/tmp",
             )
         else:
             self.client = None

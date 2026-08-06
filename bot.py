@@ -195,6 +195,7 @@ def build_bot(user_client) -> Client:
     """
     bot = Client(
         "botsession",
+        workdir="/tmp",
         api_id=config.API_ID,
         api_hash=config.API_HASH,
         bot_token=config.BOT_TOKEN,
@@ -506,15 +507,28 @@ def build_bot(user_client) -> Client:
             await _handle_voucher(m, uid, code)
             return
 
-        # 2) Telegram content link?
+        # 2) Telegram content link? (single or range: t.me/ch/100-300 or "link 300")
         try:
-            parse_link(text)
+            _chat, _start, _end = parse_link(text)
+            link, end_override = text, None
         except ValueError:
+            # Check "link end_id" format: "https://t.me/ch/100 300"
+            parts = text.rsplit(None, 1)
+            if len(parts) == 2 and parts[1].isdigit():
+                try:
+                    _chat, _start, _end = parse_link(parts[0])
+                    link, end_override = parts[0], int(parts[1])
+                except ValueError:
+                    link = None
+            else:
+                link = None
+
+        if link is None:
             lang = await get_lang(uid)
             await m.reply_text(tr(lang, "not_understood"), reply_markup=main_keyboard(lang))
             return
 
-        await _handle_content(m, uid, text)
+        await _handle_content(m, uid, link, end_override)
 
     async def _handle_voucher(m: Message, uid: int, code: str):
         if not config.TRUEMONEY_WALLET_PHONE:
@@ -573,7 +587,7 @@ def build_bot(user_client) -> Client:
             f"ผู้ใช้: {uid} (@{m.from_user.username})"
         )
 
-    async def _handle_content(m: Message, uid: int, link: str):
+    async def _handle_content(m: Message, uid: int, link: str, end_override: int = None):
         active = await db.is_active(uid)
         user = await db.get_user(uid)
         lang = user.get("language", "th") if user else "th"
@@ -589,32 +603,131 @@ def build_bot(user_client) -> Client:
             await notify_admin("⚠️ มีผู้ใช้ส่งลิงก์แต่บัญชีเจ้าของยังไม่ได้ล็อกอิน (/login)")
             return
 
-        status = await m.reply_text(tr(lang, "fetching"))
-        try:
-            delivered = await _fetch_and_deliver(m, uid, link, status, lang)
-            if delivered:
-                if active:
-                    await db.record_usage(uid)
+        # Determine range
+        _chat_id, start_id, end_id = parse_link(link)
+        if end_override is not None:
+            end_id = end_override
+        is_range = end_id is not None and end_id > start_id
+
+        if is_range:
+            msg_count = end_id - start_id + 1
+            status = await m.reply_text(
+                f"📥 กำลังดึง {msg_count} โพสต์ ({start_id}–{end_id})…"
+                if lang == "th" else
+                f"📥 Fetching {msg_count} posts ({start_id}–{end_id})…"
+            )
+            try:
+                delivered = await _fetch_and_deliver_range(m, uid, link, start_id, end_id, status, lang)
+            except Exception:
+                logger.exception("range fetch failed")
+                delivered = False
+                await status.edit_text(tr(lang, "access_denied"))
+        else:
+            status = await m.reply_text(tr(lang, "fetching"))
+            try:
+                delivered = await _fetch_and_deliver(m, uid, link, status, lang)
+            except Exception:
+                logger.exception("fetch failed")
+                delivered = False
+                await status.edit_text(tr(lang, "access_denied"))
+
+        if delivered:
+            if active:
+                await db.record_usage(uid)
+            else:
+                await db.record_trial_usage(uid)
+                fresh = await db.get_user(uid)
+                remaining = max(0, config.TRIAL_MAX_ITEMS - int(fresh.get("trial_used", 0)))
+                await m.reply_text(
+                    tr(lang, "trial_done", remaining=remaining),
+                    reply_markup=main_keyboard(lang) if remaining else plan_keyboard(lang),
+                )
+
+    async def _fetch_and_deliver_range(
+        m: Message, uid: int, link: str, start_id: int, end_id: int, status, lang: str
+    ) -> bool:
+        """Fetch a range of posts and deliver them one by one. Returns True if at least one was delivered."""
+        chat_id, _s, _e = parse_link(link)
+        total = end_id - start_id + 1
+        delivered_count = 0
+        skipped_count = 0
+        MAX_RANGE = 500
+        actual_end = min(end_id, start_id + MAX_RANGE - 1)
+
+        for msg_id in range(start_id, actual_end + 1):
+            if not user_client.is_authorized:
+                break
+            try:
+                msg = await user_client.client.get_messages(chat_id, msg_id)
+                if not msg or (not msg.media and not (msg.text and msg.text.strip())):
+                    skipped_count += 1
+                    continue
+
+                done = delivered_count + skipped_count + 1
+                await status.edit_text(
+                    f"📥 {done}/{total} — กำลังส่ง…" if lang == "th"
+                    else f"📥 {done}/{total} — sending…"
+                )
+
+                if not msg.media and msg.text:
+                    await bot.send_message(uid, msg.text)
+                    delivered_count += 1
+                    await asyncio.sleep(1)
+                    continue
+
+                size = _media_size(msg)
+                if size > MAX_DELIVERY_BYTES:
+                    skipped_count += 1
+                    continue
+
+                raw = await user_client.client.download_media(msg, in_memory=True)
+                if not raw:
+                    skipped_count += 1
+                    continue
+
+                data = bytes(raw.getvalue()) if hasattr(raw, "getvalue") else bytes(raw)
+                fname = getattr(raw, "name", f"file_{msg_id}")
+                caption = getattr(msg, "caption", "") or ""
+                forwarder = BotForwarder(config.BOT_TOKEN, str(uid))
+                ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
+
+                def _send(d=data, fn=fname, cap=caption, ex=ext):
+                    import tempfile, os
+                    suffix = f".{ex}" if ex else ""
+                    tf = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+                    try:
+                        tf.write(d); tf.close()
+                        from pathlib import Path as _P
+                        return forwarder.send_file(_P(tf.name), caption=cap)
+                    finally:
+                        try: os.unlink(tf.name)
+                        except Exception: pass
+
+                ok, _err = await asyncio.to_thread(_send)
+                if ok:
+                    delivered_count += 1
                 else:
-                    await db.record_trial_usage(uid)
-                    fresh = await db.get_user(uid)
-                    remaining = max(0, config.TRIAL_MAX_ITEMS - int(fresh.get("trial_used", 0)))
-                    await m.reply_text(
-                        tr(lang, "trial_done", remaining=remaining),
-                        reply_markup=main_keyboard(lang) if remaining else plan_keyboard(lang),
-                    )
-        except Exception as e:
-            logger.exception("fetch failed")
-            # In most live failures Telegram raises an access/peer error. Show an
-            # actionable customer message and keep detailed diagnostics in logs.
-            await status.edit_text(tr(lang, "access_denied"))
+                    skipped_count += 1
+                await asyncio.sleep(2)
+
+            except Exception as e:
+                logger.warning(f"range fetch msg {msg_id}: {e}")
+                skipped_count += 1
+
+        summary = (
+            f"✅ เสร็จแล้ว — ส่งสำเร็จ {delivered_count} / ข้าม {skipped_count} โพสต์"
+            if lang == "th" else
+            f"✅ Done — delivered {delivered_count} / skipped {skipped_count} posts"
+        )
+        await status.edit_text(summary)
+        return delivered_count > 0
 
     async def _fetch_and_deliver(
         m: Message, uid: int, link: str, status, lang: str
     ) -> bool:
         """Fetch content and deliver via the bot. Returns True only if the
         customer actually received content (so usage is counted only then)."""
-        chat_id, msg_id = parse_link(link)
+        chat_id, msg_id, _end = parse_link(link)
         msg = await user_client.client.get_messages(chat_id, msg_id)
         if not msg or (not msg.media and not (msg.text and msg.text.strip())):
             await status.edit_text(tr(lang, "not_found"))

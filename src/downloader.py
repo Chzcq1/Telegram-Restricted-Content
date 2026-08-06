@@ -127,13 +127,29 @@ class BotForwarder:
 
 
 def parse_link(link: str):
+    """Parse a Telegram post link.
+
+    Supports both single-post and range formats:
+      https://t.me/channel/123           → ('channel', 123, None)
+      https://t.me/c/1234567890/123      → (-1001234567890, 123, None)
+      https://t.me/channel/100-300       → ('channel', 100, 300)   # range
+      https://t.me/c/1234567890/100-300  → (int_id, 100, 300)       # range
+
+    Returns (chat_id, start_id, end_id).
+    end_id is None for single-post links.
+    """
     link = link.strip()
-    private = re.match(r"https://t\.me/c/(\d+)/(\d+)", link)
+    private = re.match(r"https://t\.me/c/(\d+)/(\d+)(?:-(\d+))?", link)
     if private:
-        return int(f"-100{private.group(1)}"), int(private.group(2))
-    public = re.match(r"https://t\.me/([^/?]+)/(\d+)", link)
+        chat_id = int(f"-100{private.group(1)}")
+        start_id = int(private.group(2))
+        end_id = int(private.group(3)) if private.group(3) else None
+        return chat_id, start_id, end_id
+    public = re.match(r"https://t\.me/([^/?]+)/(\d+)(?:-(\d+))?", link)
     if public:
-        return public.group(1), int(public.group(2))
+        start_id = int(public.group(2))
+        end_id = int(public.group(3)) if public.group(3) else None
+        return public.group(1), start_id, end_id
     raise ValueError(f"Unrecognised link format: {link}")
 
 
@@ -195,7 +211,7 @@ class BatchDownloader:
 
     async def scan_thumbnails(self, link: str, count: int, start_offset: int = 0) -> list:
         """Scan up to `count` messages and return thumbnail + metadata for each."""
-        chat_id, base_id = parse_link(link)
+        chat_id, base_id, _end_id = parse_link(link)
         start_id = base_id + start_offset
         limit = min(count, 24)
         results = []
@@ -272,7 +288,7 @@ class BatchDownloader:
             "forward_mode": True,
         })
         try:
-            chat_id, base_id = parse_link(link)
+            chat_id, base_id, _end_id = parse_link(link)
             start_id = base_id + start_offset
             self._log(
                 f"Copy via account — {chat_id} [{start_id}→{start_id+count-1}] → {target}"
@@ -297,7 +313,7 @@ class BatchDownloader:
             "forward_mode": True,
         })
         try:
-            chat_id, _ = parse_link(link)
+            chat_id, _sid, _eid = parse_link(link)
             self._log(
                 f"Copy via account — {len(msg_ids)} msgs from {chat_id} → {target}"
                 + (f" (topic {thread_id})" if thread_id else "")
@@ -396,7 +412,7 @@ class BatchDownloader:
             "forward_mode": True,
         })
         try:
-            chat_id, base_id = parse_link(link)
+            chat_id, base_id, _end_id = parse_link(link)
             self._log(
                 f"Clone via account — {chat_id} msg {base_id} → {target}"
                 + (f" (topic {thread_id})" if thread_id else "")
@@ -481,7 +497,7 @@ class BatchDownloader:
             "forward_mode": True,
         })
         try:
-            chat_id, base_id = parse_link(link)
+            chat_id, base_id, _end_id = parse_link(link)
             start_id = base_id + start_offset
             self._log(f"Stream via account — {chat_id} [{start_id}→{start_id+count-1}] → {target}")
             await self._resolve_peer(target)
@@ -503,7 +519,7 @@ class BatchDownloader:
             "forward_mode": True,
         })
         try:
-            chat_id, _ = parse_link(link)
+            chat_id, _sid, _eid = parse_link(link)
             self._log(f"Stream via account — {len(msg_ids)} msgs from {chat_id} → {target}")
             await self._resolve_peer(target)
             await self._stream_ids(chat_id, msg_ids, target, thread_id)
@@ -754,7 +770,7 @@ class BatchDownloader:
             current_album_id = None
 
         try:
-            chat_id, base_id = parse_link(link)
+            chat_id, base_id, _end_id = parse_link(link)
             self._log(f"Clone Stream — {chat_id} จาก msg {base_id} → {target}")
             await self._resolve_peer(target)
             self._log(f"สแกนข้อความ (หยุดเมื่อว่าง {max_gap} อันติดกัน)…")
@@ -917,7 +933,7 @@ class BatchDownloader:
             "forward_mode": forwarder is not None,
         })
         try:
-            chat_id, base_id = parse_link(link)
+            chat_id, base_id, _end_id = parse_link(link)
             start_id = base_id + start_offset
             self._log(f"Batch started — chat: {chat_id}, IDs: {start_id} to {start_id + count - 1}")
             await self._download_ids(chat_id, list(range(start_id, start_id + count)), forwarder)
@@ -939,7 +955,7 @@ class BatchDownloader:
             "forward_mode": forwarder is not None,
         })
         try:
-            chat_id, _ = parse_link(link)
+            chat_id, _sid, _eid = parse_link(link)
             self._log(f"Downloading {count} selected item(s) from chat {chat_id}")
             await self._download_ids(chat_id, msg_ids, forwarder)
         except Exception as e:
@@ -1074,7 +1090,7 @@ class BatchDownloader:
             current_album_id = None
 
         try:
-            chat_id, base_id = parse_link(link)
+            chat_id, base_id, _end_id = parse_link(link)
             self._log(f"Clone started — chat: {chat_id}, from msg {base_id}")
             self._log(f"Scanning forward (หยุดเมื่อไม่เจอข้อความ {max_gap} อันติดกัน)…")
 
