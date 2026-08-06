@@ -171,6 +171,12 @@ def build_bot(user_client) -> Client:
     async def myplan_cmd(_, m: Message):
         await _send_myplan(m.from_user.id, m.reply_text)
 
+    @bot.on_message(filters.command("id") & filters.private)
+    async def id_cmd(_, m: Message):
+        await m.reply_text(
+            f"🆔 Telegram ID ของคุณคือ: <code>{m.from_user.id}</code>"
+        )
+
     @bot.on_message(filters.command("upgrade") & filters.private)
     async def upgrade_cmd(_, m: Message):
         await m.reply_text(upgrade_text(), reply_markup=plan_keyboard())
@@ -290,6 +296,11 @@ def build_bot(user_client) -> Client:
     async def grantme_cmd(_, m: Message):
         """Convenience command for the admin's own test subscription."""
         if not is_admin(m.from_user.id):
+            await m.reply_text(
+                "⛔ คำสั่งนี้สำหรับแอดมินเท่านั้น\n"
+                f"ID ของคุณคือ <code>{m.from_user.id}</code> — "
+                "หากคุณคือแอดมิน ให้ตั้งค่า ADMIN_ID ให้ตรงกับ ID นี้"
+            )
             return
         parts = m.text.split()
         if len(parts) < 2:
