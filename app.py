@@ -170,9 +170,36 @@ async def main():
                 logger.error(f"Bot still failed after retry: {e2}. Running without bot.")
     else:
         logger.error("BOT_TOKEN / API_ID / API_HASH missing — bot not started.")
+        bot = None
+
+    # ── Connection watchdog ──
+    # On some hosts, idle TCP connections get silently dropped by NAT/firewalls
+    # after a few minutes. Pyrogram's internal ping usually recovers from this,
+    # but occasionally the reconnect itself gets stuck, leaving the process
+    # alive while the bot no longer answers anyone ("bot looks asleep").
+    # Periodically probe both Telegram clients; if a probe hangs or fails
+    # repeatedly, exit the process so the platform's process supervisor
+    # restarts it cleanly, rather than leaving a half-dead connection running.
+    if bot is not None:
+        loop.create_task(_connection_watchdog(bot, tg_client))
 
     # Keep the loop alive for Pyrogram coroutines
     await asyncio.Event().wait()
+
+
+async def _connection_watchdog(bot, tg_client, interval: int = 60, max_failures: int = 3):
+    failures = 0
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await asyncio.wait_for(bot.get_me(), timeout=20)
+            failures = 0
+        except BaseException as e:
+            failures += 1
+            logger.warning(f"Watchdog: bot ping failed ({failures}/{max_failures}): {e}")
+            if failures >= max_failures:
+                logger.error("Watchdog: bot connection appears stuck — restarting process.")
+                os._exit(1)
 
 
 if __name__ == "__main__":
