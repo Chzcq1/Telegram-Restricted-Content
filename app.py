@@ -46,16 +46,22 @@ async def main():
     loop = asyncio.get_running_loop()
 
     # ── Flask admin web UI (kept for the admin's own use) ──
-    flask_app = create_app(tg_client, loop)
-    flask_thread = threading.Thread(
-        target=lambda: flask_app.run(
-            host="0.0.0.0", port=PORT, use_reloader=False, threaded=True,
-        ),
-        daemon=True,
-        name="flask",
-    )
-    flask_thread.start()
-    logger.info(f"Admin web UI running on port {PORT}.")
+    # Never expose this powerful UI without a configured password.
+    if os.environ.get("WEB_PASSWORD"):
+        flask_app = create_app(tg_client, loop)
+        flask_thread = threading.Thread(
+            target=lambda: flask_app.run(
+                host="0.0.0.0", port=PORT, use_reloader=False, threaded=True,
+            ),
+            daemon=True,
+            name="flask",
+        )
+        flask_thread.start()
+        logger.info(f"Admin web UI running on port {PORT}.")
+    else:
+        logger.warning(
+            "WEB_PASSWORD is not configured — admin web UI is disabled."
+        )
 
     # ── Telegram subscription bot ──
     if config.BOT_TOKEN and config.API_ID and config.API_HASH:

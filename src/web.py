@@ -1082,7 +1082,10 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
 
     def _is_authenticated() -> bool:
         if not WEB_PASSWORD:
-            return True
+            # Fail closed. The application entrypoint will not expose the admin
+            # UI without this secret, and this guard also protects any direct
+            # use of create_app() in tests or alternate deployments.
+            return False
         return _get_request_token() in _auth_tokens
 
     def login_required(f):
@@ -1107,9 +1110,9 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
     @app.route("/api/auth/web-login", methods=["POST"])
     def web_login():
         if not WEB_PASSWORD:
-            token = _secrets.token_hex(32)
-            _auth_tokens.add(token)
-            return jsonify({"ok": True, "token": token})
+            return jsonify(
+                {"ok": False, "error": "Admin web UI is not configured"}
+            ), 503
         data = request.get_json(silent=True) or {}
         if data.get("password") == WEB_PASSWORD:
             token = _secrets.token_hex(32)
@@ -1134,6 +1137,7 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
         return asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=timeout)
 
     @app.route("/")
+    @login_required
     def index():
         return render_template_string(INDEX_HTML, phone=PHONE_NUMBER)
 
