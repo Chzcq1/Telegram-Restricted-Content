@@ -371,9 +371,15 @@ INDEX_HTML = r"""<!DOCTYPE html>
     <span style="color:#fca5a5">รับค่าได้จาก <a href="https://my.telegram.org/auth" target="_blank" style="color:#f87171;text-decoration:underline">my.telegram.org/auth</a></span>
   </div>
 
-  <!-- Auth card -->
+  <!-- Telegram login card -->
   <div id="auth-card" class="card p-5 hidden">
-    <p class="section-label">Authentication Required</p>
+    <div class="flex items-start justify-between gap-4 mb-4">
+      <div>
+        <p class="section-label" style="margin-bottom:6px">ล็อกอิน Telegram ก่อนเริ่มดึงงาน</p>
+        <p class="text-xs" style="color:var(--muted);line-height:1.5">เชื่อมต่อบัญชี Telegram ของคุณเพื่อเข้าถึงโพสต์ที่บัญชีนี้มีสิทธิ์ดู</p>
+      </div>
+      <span style="font-size:1.35rem" aria-hidden="true">🔐</span>
+    </div>
     <div class="space-y-3">
       <input id="auth-phone" type="tel" placeholder="Phone number  (+66812345678)" value="{{ phone }}"/>
       <div id="otp-row" class="hidden space-y-3">
@@ -381,8 +387,8 @@ INDEX_HTML = r"""<!DOCTYPE html>
         <input id="auth-2fa" type="password" placeholder="2FA password (if enabled)"/>
       </div>
       <div class="flex gap-2 flex-wrap">
-        <button class="btn btn-accent" id="btn-send" onclick="sendCode()">Send Code</button>
-        <button class="btn btn-green hidden" id="btn-verify" onclick="verifyCode()">Verify</button>
+        <button class="btn btn-accent" id="btn-send" onclick="sendCode()">ล็อกอิน Telegram</button>
+        <button class="btn btn-green hidden" id="btn-verify" onclick="verifyCode()">ยืนยันรหัส OTP</button>
       </div>
       <p id="auth-msg" class="text-xs hidden" style="color:var(--muted)"></p>
     </div>
@@ -687,13 +693,17 @@ async function checkAuth() {
 
 async function sendCode() {
   const phone = document.getElementById('auth-phone').value.trim();
+  if (!phone) {
+    setMsg('auth-msg', 'กรุณากรอกเบอร์โทรศัพท์พร้อมรหัสประเทศ เช่น +66812345678', 'red');
+    return;
+  }
   setMsg('auth-msg', '', '');
   const d = await post('/api/auth/send_code', { phone });
   if (d.ok) {
     document.getElementById('otp-row').classList.remove('hidden');
     document.getElementById('btn-verify').classList.remove('hidden');
-    document.getElementById('btn-send').textContent = 'Resend Code';
-    setMsg('auth-msg', 'Code sent — check Telegram.', 'green');
+    document.getElementById('btn-send').textContent = 'ส่งรหัสใหม่';
+    setMsg('auth-msg', 'ส่งรหัส OTP ไปที่ Telegram แล้ว กรุณากรอกเพื่อยืนยัน', 'green');
   } else setMsg('auth-msg', d.error || 'Failed.', 'red');
 }
 
@@ -702,8 +712,8 @@ async function verifyCode() {
   const code = document.getElementById('auth-otp').value.trim();
   const password = document.getElementById('auth-2fa').value.trim();
   const d = await post('/api/auth/sign_in', { phone, code, password });
-  if (d.ok) { setMsg('auth-msg', 'Authenticated.', 'green'); setTimeout(checkAuth, 600); }
-  else if (d.need_2fa) setMsg('auth-msg', 'Enter your 2FA password.', 'amber');
+  if (d.ok) { setMsg('auth-msg', 'ล็อกอินสำเร็จ กำลังเปิดเครื่องมือดึงงาน…', 'green'); setTimeout(checkAuth, 600); }
+  else if (d.need_2fa) setMsg('auth-msg', 'กรุณากรอกรหัสยืนยันสองขั้นตอน (2FA) แล้วกดยืนยัน OTP อีกครั้ง', 'amber');
   else setMsg('auth-msg', d.error || 'Failed.', 'red');
 }
 
