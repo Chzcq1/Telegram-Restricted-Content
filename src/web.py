@@ -1114,7 +1114,7 @@ def create_app(tg_client, loop: asyncio.AbstractEventLoop) -> Flask:
                 {"ok": False, "error": "Admin web UI is not configured"}
             ), 503
         data = request.get_json(silent=True) or {}
-        if data.get("password") == WEB_PASSWORD:
+        if _secrets.compare_digest(str(data.get("password") or ""), WEB_PASSWORD):
             token = _secrets.token_hex(32)
             _auth_tokens.add(token)
             return jsonify({"ok": True, "token": token})
