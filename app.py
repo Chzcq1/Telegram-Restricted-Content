@@ -37,7 +37,20 @@ def _copy_sessions_to_tmp():
     Malformed/corrupted sessions are removed so Pyrogram can create a fresh one.
     """
     log = logging.getLogger(__name__)
+    in_deployment = bool(os.environ.get("REPLIT_DEPLOYMENT"))
     for name in ("mysession.session", "botsession.session"):
+        # In production, never reuse the bot session from the snapshot —
+        # the bot can always re-authenticate from BOT_TOKEN, and sharing the
+        # same auth key with the dev environment causes AUTH_KEY_DUPLICATED.
+        if in_deployment and name == "botsession.session":
+            for p in (f"/tmp/{name}", f"/tmp/{name}-journal", f"/tmp/{name}-wal", f"/tmp/{name}-shm"):
+                if os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except Exception:
+                        pass
+            log.info("Production: starting bot with a fresh session (from BOT_TOKEN).")
+            continue
         src_path = os.path.join(os.path.dirname(__file__), name)
         dst_path = f"/tmp/{name}"
 
@@ -131,7 +144,17 @@ async def main():
             me = await bot.get_me()
             logger.info(f"Bot started as @{me.username}")
         except Exception as e:
-            logger.error(f"Bot failed to start: {e}. Retrying in 10s…")
+            logger.error(f"Bot failed to start: {e}. Wiping bot session and retrying in 10s…")
+            # A bad/duplicated session is the usual culprit — remove it so
+            # Pyrogram re-authenticates cleanly from BOT_TOKEN.
+            for p in ("/tmp/botsession.session", "/tmp/botsession.session-journal",
+                      "/tmp/botsession.session-wal", "/tmp/botsession.session-shm"):
+                if os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except Exception:
+                        pass
+            bot = build_bot(tg_client)
             await asyncio.sleep(10)
             try:
                 await bot.start()
