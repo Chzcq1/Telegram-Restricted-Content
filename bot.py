@@ -286,6 +286,28 @@ def build_bot(user_client) -> Client:
         except Exception:
             pass
 
+    @bot.on_message(filters.command("grantme") & filters.private)
+    async def grantme_cmd(_, m: Message):
+        """Convenience command for the admin's own test subscription."""
+        if not is_admin(m.from_user.id):
+            return
+        parts = m.text.split()
+        if len(parts) < 2:
+            await m.reply_text("ใช้: <code>/grantme &lt;วัน&gt;</code>\nตัวอย่าง: <code>/grantme 30</code>")
+            return
+        try:
+            days = int(parts[1])
+            if days <= 0 or days > 3650:
+                raise ValueError
+        except ValueError:
+            await m.reply_text("จำนวนวันต้องเป็นตัวเลขตั้งแต่ 1 ถึง 3650")
+            return
+        exp = await db.add_subscription(m.from_user.id, days)
+        await m.reply_text(
+            f"✅ เพิ่มสมาชิกให้ตัวเอง {days} วันแล้ว\n"
+            f"หมดอายุ: {_fmt_expiry(exp)}"
+        )
+
     # ── Callback buttons ───────────────────────────────────────────────────────
 
     @bot.on_callback_query()
@@ -318,7 +340,7 @@ def build_bot(user_client) -> Client:
     # ── Free-text: voucher or content link ─────────────────────────────────────
 
     @bot.on_message(filters.private & filters.text & ~filters.command([
-        "start", "help", "myplan", "upgrade", "login", "code", "twofa", "stats", "grant",
+        "start", "help", "myplan", "upgrade", "login", "code", "twofa", "stats", "grant", "grantme",
     ]))
     async def on_text(_, m: Message):
         uid = m.from_user.id
