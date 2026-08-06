@@ -11,6 +11,7 @@ import io
 import time
 import asyncio
 import logging
+import re
 
 from pyrogram import Client, filters
 from pyrogram.types import (
@@ -151,6 +152,24 @@ def language_keyboard() -> InlineKeyboardMarkup:
     ]])
 
 
+def normalize_phone(value: str) -> str | None:
+    """Convert common phone formats to Telegram's E.164 format.
+
+    Thai users commonly paste 08xxxxxxxx or +66 8xxxxxxxx. Telegram requires
+    +668xxxxxxxx, without the domestic leading zero.
+    """
+    raw = re.sub(r"[\s().-]", "", (value or "").strip())
+    if raw.startswith("00"):
+        raw = "+" + raw[2:]
+    elif raw.startswith("0"):
+        raw = "+66" + raw[1:]
+    elif raw.startswith("66"):
+        raw = "+" + raw
+    if not re.fullmatch(r"\+[1-9]\d{7,14}", raw):
+        return None
+    return raw
+
+
 def _support_url() -> str:
     c = config.SUPPORT_CONTACT.strip()
     if c.startswith("@"):
@@ -260,18 +279,35 @@ def build_bot(user_client) -> Client:
         if len(parts) < 2:
             await m.reply_text(
                 "การล็อกอินบัญชีเจ้าของ (แอดมินเท่านั้น):\n"
-                "1) <code>/login +66xxxxxxxxx</code> เพื่อรับรหัส\n"
+                "1) <code>/login 0812345678</code> หรือ <code>/login +66812345678</code>\n"
                 "2) <code>/code 12345</code> กรอกรหัสที่ได้รับ\n"
                 "3) ถ้ามี 2FA ใช้ <code>/twofa รหัสผ่าน</code>"
             )
             return
-        phone = parts[1].strip()
+        phone = normalize_phone(parts[1])
+        if not phone:
+            await m.reply_text(
+                "❌ รูปแบบเบอร์ไม่ถูกต้อง\n\n"
+                "ใช้เบอร์แบบใดแบบหนึ่ง:\n"
+                "• <code>/login 0812345678</code>\n"
+                "• <code>/login +66812345678</code>\n\n"
+                "ถ้าใช้ +66 แล้ว ห้ามใส่ 0 ซ้ำ เช่นไม่ใช่ +660812345678"
+            )
+            return
         res = await user_client.send_code(phone)
         if res.get("ok"):
             _pending_plan[m.from_user.id] = f"login:{phone}"
             await m.reply_text("📲 ส่งรหัสไปที่ Telegram แล้ว — ใช้ /code <รหัส>")
         else:
-            await m.reply_text(f"❌ {res.get('error')}")
+            error = res.get("error", "")
+            if "PHONE_NUMBER_INVALID" in error:
+                await m.reply_text(
+                    "❌ Telegram ไม่ยอมรับเบอร์นี้\n"
+                    "ตรวจสอบว่าเบอร์เป็นเบอร์ที่ผูกกับบัญชี Telegram และใช้รูปแบบ "
+                    "<code>+66812345678</code> โดยไม่ใส่ 0 ซ้ำ"
+                )
+            else:
+                await m.reply_text(f"❌ {error}")
 
     @bot.on_message(filters.command("code") & filters.private)
     async def code_cmd(_, m: Message):
