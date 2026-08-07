@@ -156,13 +156,17 @@ def parse_link(link: str):
     end_id is None for single-post links.
     """
     link = link.strip()
-    private = re.match(r"https://t\.me/c/(\d+)/(\d+)(?:/?\+(\d+)|-(\d+))?", link)
+    # Telegram's web-preview links use a "/s/" prefix (e.g. shared from
+    # t.me/s/channelname/123, the browsable preview of a public channel that
+    # doesn't require joining/login) — strip it before the normal match.
+    link = re.sub(r"^(https?://t\.me/)s/", r"\1", link, flags=re.IGNORECASE)
+    private = re.match(r"https?://t\.me/c/(\d+)/(\d+)(?:/?\+(\d+)|-(\d+))?", link, re.IGNORECASE)
     if private:
         chat_id = int(f"-100{private.group(1)}")
         start_id = int(private.group(2))
         end_id = _resolve_end_id(start_id, private.group(3), private.group(4))
         return chat_id, start_id, end_id
-    public = re.match(r"https://t\.me/([^/?]+)/(\d+)(?:/?\+(\d+)|-(\d+))?", link)
+    public = re.match(r"https?://t\.me/([^/?]+)/(\d+)(?:/?\+(\d+)|-(\d+))?", link, re.IGNORECASE)
     if public:
         start_id = int(public.group(2))
         end_id = _resolve_end_id(start_id, public.group(3), public.group(4))

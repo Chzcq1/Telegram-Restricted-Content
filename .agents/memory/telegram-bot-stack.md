@@ -34,3 +34,9 @@ description: Durable, non-obvious setup lessons for this project's Pyrogram bot
   text. Also send raw fetched text with `parse_mode=ParseMode.DISABLED` (via
   `bot.send_message`, not the raw Bot API `BotForwarder`) — default Markdown
   parsing silently fails on stray `_`/`*` that are common in URLs.
+- `parse_link()` must accept `t.me/s/<name>/<id>` (Telegram's browsable
+  web-preview link format, used to view public channels without joining) in
+  addition to the plain `t.me/<name>/<id>` form, and both `http://`/`https://`.
+  **Why:** users commonly copy the `/s/` variant; missing it makes every such
+  link silently fail with "link not found" — looked like a customer-specific
+  bug but was a link-format gap in the regex.
