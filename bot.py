@@ -549,6 +549,13 @@ def build_bot(user_client) -> Client:
         "start", "help", "myplan", "upgrade", "id", "login", "code", "twofa", "stats", "grant", "grantme",
     ]))
     async def on_text(_, m: Message):
+        # After a connection hiccup (e.g. Telegram's "UpdatesTooLong"), Pyrogram
+        # replays a backlog of missed updates via get_difference. That can
+        # redeliver old private messages as if they just arrived, which then
+        # fail to parse as a link and flood the chat with "not_understood"
+        # replies for messages the customer sent long ago. Skip stale replays.
+        if m.date and (time.time() - m.date.timestamp()) > 120:
+            return
         uid = m.from_user.id
         text = (m.text or "").strip()
         await db.ensure_user(uid, m.from_user.username or "")
