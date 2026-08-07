@@ -14,6 +14,7 @@ import logging
 import re
 
 from pyrogram import Client, filters
+from pyrogram.enums import ParseMode, MessageMediaType
 from pyrogram.types import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
@@ -38,6 +39,17 @@ def _looks_like_chat_id(token: str) -> bool:
     if token.startswith("-") and token[1:].isdigit() and len(token) >= 7:
         return True
     return False
+
+
+def _has_downloadable_media(msg) -> bool:
+    """True if `msg.media` is real downloadable media.
+
+    Pyrogram sets `msg.media` to MessageMediaType.WEB_PAGE for plain text
+    messages that merely contain a link (Telegram shows a link preview for
+    them) — that's not a file and has no `file_id`, so treating it as media
+    crashes `download_media()`. Those messages must be handled as text.
+    """
+    return bool(msg.media) and msg.media != MessageMediaType.WEB_PAGE
 
 
 def _media_size(msg) -> int:
@@ -828,7 +840,8 @@ def build_bot(user_client) -> Client:
                 break
             try:
                 msg = await user_client.client.get_messages(chat_id, msg_id)
-                if not msg or (not msg.media and not (msg.text and msg.text.strip())):
+                has_media = _has_downloadable_media(msg) if msg else False
+                if not msg or (not has_media and not (msg.text and msg.text.strip())):
                     skipped_count += 1
                     continue
 
@@ -838,8 +851,8 @@ def build_bot(user_client) -> Client:
                     else f"📥 {done}/{total} — sending…"
                 )
 
-                if not msg.media and msg.text:
-                    await bot.send_message(target, msg.text)
+                if not has_media and msg.text:
+                    await bot.send_message(target, msg.text, parse_mode=ParseMode.DISABLED)
                     delivered_count += 1
                     await asyncio.sleep(delay)
                     continue
@@ -903,13 +916,14 @@ def build_bot(user_client) -> Client:
         target = dest_chat_id or uid
         chat_id, msg_id, _end = parse_link(link)
         msg = await user_client.client.get_messages(chat_id, msg_id)
-        if not msg or (not msg.media and not (msg.text and msg.text.strip())):
+        has_media = _has_downloadable_media(msg) if msg else False
+        if not msg or (not has_media and not (msg.text and msg.text.strip())):
             await status.edit_text(tr(lang, "not_found"))
             return False
 
-        # Text-only
-        if not msg.media and msg.text:
-            await bot.send_message(target, msg.text)
+        # Text-only (including messages that merely contain a link preview)
+        if not has_media and msg.text:
+            await bot.send_message(target, msg.text, parse_mode=ParseMode.DISABLED)
             await status.edit_text(tr(lang, "text_sent"))
             return True
 

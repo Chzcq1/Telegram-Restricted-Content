@@ -23,3 +23,14 @@ description: Durable, non-obvious setup lessons for this project's Pyrogram bot
   around `bot.start()` — a mid-startup kill delivers `asyncio.CancelledError`,
   which doesn't subclass `Exception` and will otherwise escape retry logic and
   crash the whole process.
+- A plain text message that merely contains a URL gets `msg.media =
+  MessageMediaType.WEB_PAGE` in Pyrogram (the link-preview object), not `None`.
+  **Why:** any code that branches on `if msg.media` to decide "download vs.
+  send as text" wrongly takes the download path for these, then crashes with
+  `'WebPage' object has no attribute 'file_id'` inside `download_media()` —
+  looks like "messages with links get silently skipped."
+  **How to apply:** treat media as downloadable only if
+  `msg.media and msg.media != MessageMediaType.WEB_PAGE`; otherwise handle as
+  text. Also send raw fetched text with `parse_mode=ParseMode.DISABLED` (via
+  `bot.send_message`, not the raw Bot API `BotForwarder`) — default Markdown
+  parsing silently fails on stray `_`/`*` that are common in URLs.

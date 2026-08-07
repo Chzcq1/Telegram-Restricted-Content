@@ -6,9 +6,21 @@ import datetime
 import requests as _requests
 from pathlib import Path
 from typing import List, Optional
+from pyrogram.enums import MessageMediaType
 
 DOWNLOADS_DIR = Path("downloads")
 DOWNLOADS_DIR.mkdir(exist_ok=True)
+
+
+def _has_downloadable_media(msg) -> bool:
+    """True if `msg.media` is real downloadable media.
+
+    Pyrogram sets `msg.media` to MessageMediaType.WEB_PAGE for plain text
+    messages that merely contain a link (Telegram shows a link preview for
+    them) — that's not a file and has no `file_id`, so treating it as media
+    crashes `download_media()`. Those messages must be handled as text.
+    """
+    return bool(msg and msg.media and msg.media != MessageMediaType.WEB_PAGE)
 
 
 class BotForwarder:
@@ -610,13 +622,14 @@ class BatchDownloader:
 
             try:
                 msg = await self.tg.client.get_messages(from_chat, msg_id)
-                if not msg or (not msg.media and not (msg.text and msg.text.strip())):
+                has_media = _has_downloadable_media(msg)
+                if not msg or (not has_media and not (msg.text and msg.text.strip())):
                     self.state["skipped"] += 1
                     self._log(f"[{msg_id}] ข้าม (ไม่มีสื่อ)")
                     continue
 
-                # Text-only message
-                if not msg.media and msg.text:
+                # Text-only message (including link-preview-only messages)
+                if not has_media and msg.text:
                     await flush_album_stream()
                     for attempt in range(5):
                         try:
@@ -808,7 +821,7 @@ class BatchDownloader:
                         await flush_album()
                         return
 
-                    has_media = bool(msg and msg.media)
+                    has_media = _has_downloadable_media(msg)
                     has_text  = bool(msg and msg.text and msg.text.strip())
 
                     if not has_media and not has_text:
@@ -1128,7 +1141,7 @@ class BatchDownloader:
                         await flush_album()
                         return
 
-                    has_media = bool(msg and msg.media)
+                    has_media = _has_downloadable_media(msg)
                     has_text  = bool(msg and msg.text and msg.text.strip())
 
                     if not has_media and not has_text:
